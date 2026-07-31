@@ -10,7 +10,10 @@ from keyboards import (
     guide_keyboard,
     plans_keyboard,
     period_keyboard,
-    profile_keyboard
+    profile_keyboard,
+    about_vpn_keyboard,
+    support_keyboard,
+    contact_dev_keyboard
 )
 from texts import (
     WELCOME_TEXT,
@@ -25,7 +28,16 @@ from texts import (
     BUY_TEXT,
     SUPPORT_TEXT,
     SETTINGS_TEXT,
-    MAIN_MENU_TEXT
+    MAIN_MENU_TEXT,
+    ABOUT_VPN_TEXT,
+    ABOUT_VELORA_TEXT,
+    WHAT_IS_VPN_TEXT,
+    HOW_VPN_WORKS_TEXT,
+    PRIVACY_TEXT,
+    PERFORMANCE_TEXT,
+    SERVERS_INFO_TEXT,
+    SUPPORT_MAIN_TEXT,
+    CONTACT_DEV_TEXT
 )
 from database import (
     add_user,
@@ -227,14 +239,65 @@ async def guide(message: Message):
 @router.message(F.text == "💬 Поддержка")
 async def support(message: Message):
     await message.answer(
-        SUPPORT_TEXT
+        SUPPORT_MAIN_TEXT,
+        reply_markup=support_keyboard()
+    )
+
+@router.message(F.text == "💬 Написать в поддержку")
+async def contact_support(message: Message):
+    await message.answer(
+        CONTACT_DEV_TEXT,
+        reply_markup=contact_dev_keyboard()
     )
 
 
-@router.message(F.text == "⚙️ Настройки")
-async def settings(message: Message):
+@router.message(F.text == "🛡️ О VPN")
+async def about_vpn(message: Message):
     await message.answer(
-        SETTINGS_TEXT
+        ABOUT_VPN_TEXT,
+        reply_markup=about_vpn_keyboard()
+    )
+
+@router.message(F.text == "🚀 О VELORA")
+async def about_velora(message: Message):
+    await message.answer(
+        ABOUT_VELORA_TEXT,
+        reply_markup=about_vpn_keyboard()
+    )
+
+@router.message(F.text == "❓ Что такое VPN")
+async def what_is_vpn(message: Message):
+    await message.answer(
+        WHAT_IS_VPN_TEXT,
+        reply_markup=about_vpn_keyboard()
+    )
+
+@router.message(F.text == "🔐 Как работает защита")
+async def how_vpn_works(message: Message):
+    await message.answer(
+        HOW_VPN_WORKS_TEXT,
+        reply_markup=about_vpn_keyboard()
+    )
+
+@router.message(F.text == "🛡️ Конфиденциальность")
+async def privacy(message: Message):
+    await message.answer(
+        PRIVACY_TEXT,
+        reply_markup=about_vpn_keyboard()
+    )
+
+@router.message(F.text == "⚡ Производительность")
+async def performance(message: Message):
+    await message.answer(
+        PERFORMANCE_TEXT,
+        reply_markup=about_vpn_keyboard()
+    )
+
+@router.message(F.text == "🌍 Серверы VELORA")
+async def servers_info(message: Message):
+    await message.answer(
+        SERVERS_INFO_TEXT,
+        reply_markup=about_vpn_keyboard()
     )
 
 

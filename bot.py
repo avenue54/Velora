@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from handlers import router
 from database import create_database
 from admin import router as admin_router
+from config import BOT_TOKEN
 
 load_dotenv()
 

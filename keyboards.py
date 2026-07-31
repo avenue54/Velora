@@ -23,7 +23,7 @@ def main_menu_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🚀 Подключиться")],
             [KeyboardButton(text="👤 Мой аккаунт"), KeyboardButton(text="💳 Тарифы")],
             [KeyboardButton(text="🌍 Серверы"), KeyboardButton(text="📖 Инструкция")],
-            [KeyboardButton(text="💬 Поддержка"), KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="💬 Поддержка"), KeyboardButton(text="🛡️ О VPN")],
         ],
         resize_keyboard=True
     )
@@ -152,6 +152,44 @@ def period_keyboard(plans):
     )
     
     
+def support_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💬 Написать в поддержку")],
+            [KeyboardButton(text="🛡️ О VPN")],
+            [KeyboardButton(text="🏠 Главное меню")],
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
+
+
+def contact_dev_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="👨‍💻 Связаться с разработчиком",
+        url="tg://user?id=1001775264"
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def about_vpn_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🚀 О VELORA")],
+            [KeyboardButton(text="❓ Что такое VPN")],
+            [KeyboardButton(text="🔐 Как работает защита")],
+            [KeyboardButton(text="🛡️ Конфиденциальность")],
+            [KeyboardButton(text="⚡ Производительность")],
+            [KeyboardButton(text="🌍 Серверы VELORA")],
+            [KeyboardButton(text="🏠 Главное меню")],
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
+
+
 def profile_keyboard() -> ReplyKeyboardMarkup:
 
     keyboard = ReplyKeyboardMarkup(
