@@ -1,8 +1,8 @@
 import sqlite3
 from datetime import datetime, timedelta
+import os
 
-
-DB_NAME = "velora.db"
+DB_NAME = "/app/data/velora.db"
 
 
 def get_connection():
