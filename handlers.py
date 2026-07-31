@@ -92,22 +92,6 @@ async def choose_tariff(message: Message):
 
 @router.message(F.text == "👤 Мой аккаунт")
 async def my_profile(message: Message):
-    
-    days_left = ""
-
-    if end_date:
-
-        end = datetime.strptime(
-            end_date,
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-        days = (end - datetime.now()).days
-
-        if days < 0:
-            days = 0
-
-        days_left = f"\n⏳ Осталось: {days} дней"
 
     profile = get_profile(
         message.from_user.id
@@ -125,6 +109,7 @@ async def my_profile(message: Message):
         return
 
 
+
     (
         telegram_id,
         first_name,
@@ -136,14 +121,40 @@ async def my_profile(message: Message):
         start_date,
         end_date,
         devices_used
-        ) = profile
+    ) = profile
+
+
+
+    days_left = ""
+
+
+    if end_date:
+
+        end = datetime.strptime(
+            end_date,
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+
+        days = (
+            end - datetime.now()
+        ).days
+
+
+        if days < 0:
+            days = 0
+
+
+        days_left = (
+            f"\n⏳ Осталось: {days} дней"
+        )
+
 
 
     if not plan:
-        
-        
 
         await message.answer(
+
             "👤 Профиль VELORA\n\n"
 
             f"🆔 Telegram ID:\n"
@@ -164,6 +175,7 @@ async def my_profile(message: Message):
 
 
 
+
     await message.answer(
 
         "👤 Профиль VELORA\n\n"
@@ -178,11 +190,17 @@ async def my_profile(message: Message):
 
         "📊 Твоя подписка:\n\n"
 
-        f"📊 Статус: {subscription_status_text(status)}"
-        f"{days_left}\n"
-        f"Тариф: {plan}\n"
-        f"Срок: {period}\n"
-        f"Стоимость: {price}\n\n"
+        f"📊 Статус: {subscription_status_text(status)}\n"
+
+        f"💳 Тариф: {plan}\n"
+
+        f"📅 Срок: {period}\n"
+
+        f"💰 Стоимость: {price}\n"
+
+        f"📱 Устройств: {devices_used}\n"
+
+        f"{days_left}\n\n"
 
         "━━━━━━━━━━━━━━\n\n"
 
@@ -335,6 +353,13 @@ async def buy_tariff(
 
 
     parts = message.text.split(" — ")
+
+    if len(parts) != 2:
+        await message.answer(
+            "❌ Некорректный выбор тарифа"
+        )
+        return
+
 
     period = parts[0]
     price = parts[1]
