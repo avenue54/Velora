@@ -167,8 +167,8 @@ def support_keyboard() -> ReplyKeyboardMarkup:
 def contact_dev_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="👨‍💻 Связаться с разработчиком",
-        url="tg://user?id=1001775264"
+        text="👨‍💻 Связаться с поддержкой",
+        url="https://t.me/Velora_Supports"
     )
     builder.adjust(1)
     return builder.as_markup()
