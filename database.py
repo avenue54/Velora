@@ -58,7 +58,7 @@ def create_database():
     )
     """)
 
-    # Миграция для старой базы
+    # Миграция старой базы
     try:
         cursor.execute(
             """
@@ -89,7 +89,7 @@ def create_database():
     except Exception:
         pass
 
-    # Платежи (заказы)
+    # Платежи
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,7 +104,7 @@ def create_database():
         paid_at TEXT
     )
     """)
-    
+
     # VPN конфигурации WireGuard
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS vpn_configs (
@@ -121,40 +121,25 @@ def create_database():
     cursor.execute("SELECT COUNT(*) FROM plans")
     count = cursor.fetchone()[0]
 
-    # if count == 0:
-    #     cursor.executemany(
-    #         """
-    #         INSERT INTO plans
-    #         (name, description, devices, period, price)
-    #         VALUES (?, ?, ?, ?, ?)
-    #         """,
-    #         [
-    #             ("Start", "Для знакомства с VELORA", 2, "1 месяц", "69 ₽"),
-    #             ("Start", "Для знакомства с VELORA", 2, "3 месяца", "149 ₽"),
-    #             ("Plus", "Популярный тариф", 5, "1 месяц", "129 ₽"),
-    #             ("Plus", "Популярный тариф", 5, "3 месяца", "349 ₽"),
-    #             ("Pro", "Максимальные возможности", 10, "1 месяц", "199 ₽"),
-    #             ("Pro", "Максимальные возможности", 10, "3 месяца", "499 ₽"),
-    #         ],
-    #     )
-    
     if count == 0:
         cursor.executemany(
-            ...
+            """
+            INSERT INTO plans
+            (name, description, devices, period, price)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                ("Start", "Для знакомства с VELORA", 2, "1 месяц", "69 ₽"),
+                ("Start", "Для знакомства с VELORA", 2, "3 месяца", "149 ₽"),
+                ("Plus", "Популярный тариф", 5, "1 месяц", "129 ₽"),
+                ("Plus", "Популярный тариф", 5, "3 месяца", "349 ₽"),
+                ("Pro", "Максимальные возможности", 10, "1 месяц", "199 ₽"),
+                ("Pro", "Максимальные возможности", 10, "3 месяца", "499 ₽"),
+            ],
         )
 
-    cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table';"
-    )
-
-    print("DATABASE TABLES:", cursor.fetchall())
-
     conn.commit()
     conn.close()
-
-    conn.commit()
-    conn.close()
-
 
 # =========================
 # ПОЛЬЗОВАТЕЛИ
