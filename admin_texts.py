@@ -38,35 +38,6 @@ STATISTICS_TEXT = """
 📊 Статистика VELORA
 
 👥 Пользователи:
-{}
-
-💳 Подписки:
-{}
-"""
-
-STATISTICS_TEXT = """
-📊 Статистика VELORA
-
-👥 Пользователи:
-{users}
-
-💳 Всего подписок:
-{subscriptions}
-
-🟢 Активные:
-{active}
-
-⏳ Ожидают оплаты:
-{pending}
-
-💰 Потенциальный доход:
-{income} ₽
-"""
-
-STATISTICS_TEXT = """
-📊 Статистика VELORA
-
-👥 Пользователи:
 {users}
 
 💳 Всего подписок:
@@ -78,6 +49,7 @@ STATISTICS_TEXT = """
 ⏳ Ожидают оплаты:
 {pending}
 """
+
 
 SUBSCRIPTIONS_TEXT = """
 💳 Заявки VELORA

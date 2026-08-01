@@ -31,10 +31,6 @@ from config import ADMIN_ID
 router = Router()
 
 
-
-
-
-
 # ======================
 # АДМИН ПАНЕЛЬ
 # ======================
@@ -46,11 +42,9 @@ async def admin_panel(message: Message):
         return
 
     await message.answer(
-    ADMIN_PANEL_TEXT,
-    reply_markup=admin_main_keyboard()
-)
-
-
+        ADMIN_PANEL_TEXT,
+        reply_markup=admin_main_keyboard()
+    )
 
 
 @router.message(
@@ -61,12 +55,9 @@ async def users(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
 
-
     users = get_all_users()
 
-
     text = "👥 Пользователи:\n\n"
-
 
     for user in users:
 
@@ -76,7 +67,6 @@ async def users(message: Message):
             f"Имя: {user[3]}\n"
             f"Статус: {user[4]}\n\n"
         )
-
 
     await message.answer(text)
 
@@ -91,9 +81,7 @@ async def subscriptions(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
 
-
     data = get_subscriptions()
-
 
     if not data:
 
@@ -102,7 +90,6 @@ async def subscriptions(message: Message):
         )
 
         return
-
 
     for sub in data:
 
@@ -117,7 +104,6 @@ async def subscriptions(message: Message):
             date
         ) = sub
 
-
         text = (
             f"💳 Заявка #{sub_id}\n\n"
             f"👤 Пользователь: {name}\n"
@@ -129,11 +115,11 @@ async def subscriptions(message: Message):
             f"🕒 {date}"
         )
 
-
         await message.answer(
             text,
             reply_markup=subscription_admin_keyboard(sub_id)
         )
+
 
 @router.message(F.text == "📊 Статистика")
 async def statistics(message: Message):
@@ -151,9 +137,10 @@ async def statistics(message: Message):
             pending=data["pending"]
         )
     )
-    
+
+
 @router.callback_query(F.data.startswith("activate:"))
-async def activate_subscription(callback: CallbackQuery):
+async def activate_subscription_handler(callback: CallbackQuery):
 
     if callback.from_user.id != ADMIN_ID:
         await callback.answer(
@@ -173,20 +160,21 @@ async def activate_subscription(callback: CallbackQuery):
     await callback.message.delete()
 
     await callback.message.answer(
-    f"✅ Подписка #{subscription_id} активирована"
+        f"✅ Подписка #{subscription_id} активирована"
     )
 
     await callback.answer()
-    
+
+
 @router.callback_query(F.data.startswith("reject:"))
-async def reject_subscription(callback: CallbackQuery):
-    
+async def reject_subscription_handler(callback: CallbackQuery):
+
     if callback.from_user.id != ADMIN_ID:
-            await callback.answer(
-                "Нет доступа",
-                show_alert=True
-            )
-            return
+        await callback.answer(
+            "Нет доступа",
+            show_alert=True
+        )
+        return
 
     subscription_id = int(
         callback.data.split(":")[1]
@@ -202,7 +190,7 @@ async def reject_subscription(callback: CallbackQuery):
     await callback.message.delete()
 
     await callback.message.answer(
-    f"❌ Подписка #{subscription_id} отклонена"
+        f"❌ Подписка #{subscription_id} отклонена"
     )
 
     await callback.answer()
