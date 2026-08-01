@@ -323,3 +323,17 @@ def profile_keyboard() -> ReplyKeyboardMarkup:
     )
 
     return keyboard
+
+
+def channel_subscribe_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="📢 Подписаться на канал",
+        url="https://t.me/Velora_news"
+    )
+    builder.button(
+        text="✅ Я подписался",
+        callback_data="check_subscription"
+    )
+    builder.adjust(1)
+    return builder.as_markup()
