@@ -104,6 +104,18 @@ def create_database():
         paid_at TEXT
     )
     """)
+    
+    # VPN конфигурации WireGuard
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS vpn_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        telegram_id INTEGER UNIQUE,
+        private_key TEXT,
+        public_key TEXT,
+        vpn_ip TEXT,
+        created_at TEXT
+    )
+    """)
 
     # Добавление тарифов
     cursor.execute("SELECT COUNT(*) FROM plans")
@@ -651,3 +663,48 @@ def update_payment_status(payment_id: int, status: str, provider_payment_id=None
         )
     conn.commit()
     conn.close()
+
+# =========================
+# VPN
+# =========================
+
+def save_vpn_config(telegram_id, private_key, public_key, vpn_ip):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT OR REPLACE INTO vpn_configs
+        (telegram_id, private_key, public_key, vpn_ip, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            telegram_id,
+            private_key,
+            public_key,
+            vpn_ip,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_vpn_config(telegram_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT *
+        FROM vpn_configs
+        WHERE telegram_id = ?
+        """,
+        (telegram_id,),
+    )
+
+    data = cursor.fetchone()
+    conn.close()
+
+    return data
