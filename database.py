@@ -809,7 +809,14 @@ def get_profile(telegram_id):
 
         WHERE users.telegram_id = ?
 
-        ORDER BY subscriptions.id DESC
+        ORDER BY
+            CASE subscriptions.status
+                WHEN 'active' THEN 1
+                WHEN 'pending' THEN 2
+                WHEN 'rejected' THEN 3
+                ELSE 4
+            END,
+            subscriptions.id DESC
 
         LIMIT 1
         """,
