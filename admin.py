@@ -51,9 +51,7 @@ async def admin_panel(message: Message):
 )
 
 
-# ======================
-# ПОЛЬЗОВАТЕЛИ
-# ======================
+
 
 @router.message(
     F.text == "👥 Пользователи"
