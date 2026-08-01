@@ -325,14 +325,12 @@ def profile_keyboard() -> ReplyKeyboardMarkup:
     return keyboard
 
 
-def payment_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="💳 Оплатить")],
-            [KeyboardButton(text="🔄 Проверить оплату")],
-            [KeyboardButton(text="⬅️ Изменить тариф")],
-            [KeyboardButton(text="🏠 Главное меню")],
-        ],
-        resize_keyboard=True
-    )
-    return keyboard
+def payment_keyboard() -> InlineKeyboardMarkup:
+    """Все кнопки заказа — inline под сообщением."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💳 Оплатить", callback_data="payment:pay")
+    builder.button(text="🔄 Проверить оплату", callback_data="payment:check")
+    builder.button(text="⬅️ Изменить тариф", callback_data="payment:change_tariff")
+    builder.button(text="🏠 Главное меню", callback_data="payment:main_menu")
+    builder.adjust(1)
+    return builder.as_markup()

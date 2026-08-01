@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from datetime import datetime
 from aiogram.filters import CommandStart
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from keyboards import (
     main_menu_reply_keyboard,
     tariffs_reply_keyboard,
@@ -23,7 +23,7 @@ from keyboards import (
     platform_macos_keyboard,
     get_config_keyboard,
     guide_support_keyboard,
-    payment_keyboard
+    payment_keyboard,
 )
 from texts import (
     WELCOME_TEXT,
@@ -687,19 +687,33 @@ async def back_to_guide(message: Message):
 # ОПЛАТА (Platega-ready stubs)
 # ======================
 
-@router.message(F.text == "💳 Оплатить")
-async def pay_button(message: Message):
-    await message.answer(
-        payment_pay_stub_text(),
-        reply_markup=payment_keyboard(),
+@router.callback_query(F.data == "payment:pay")
+async def pay_button(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.answer(payment_pay_stub_text())
+
+
+@router.callback_query(F.data == "payment:check")
+async def check_payment_button(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.answer(payment_check_stub_text())
+
+
+@router.callback_query(F.data == "payment:change_tariff")
+async def payment_change_tariff(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.answer(
+        TARIFFS_TEXT,
+        reply_markup=tariffs_reply_keyboard(),
     )
 
 
-@router.message(F.text == "🔄 Проверить оплату")
-async def check_payment_button(message: Message):
-    await message.answer(
-        payment_check_stub_text(),
-        reply_markup=payment_keyboard(),
+@router.callback_query(F.data == "payment:main_menu")
+async def payment_main_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.answer(
+        MAIN_MENU_TEXT,
+        reply_markup=main_menu_reply_keyboard(),
     )
 
 
