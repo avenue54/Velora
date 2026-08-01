@@ -390,7 +390,7 @@ PRIVACY_POLICY_TEXT = (
     "написав в поддержку.\n\n"
     "7. Контакты\n"
     "По вопросам конфиденциальности: @Velora_Supports\n"
-    "Email: support@velora.network"
+    "Email: velora.faq@bk.ru"
 )
 
 USER_AGREEMENT_TEXT = (
@@ -466,7 +466,7 @@ SUPPORT_CONTACTS_TEXT = (
     "💬 Контакты поддержки VELORA\n\n"
     "Связаться с нами можно так:\n\n"
     "👤 Telegram: @Velora_Supports\n"
-    "📧 Email: support@velora.network\n\n"
+    "📧 Email: velora.faq@bk.ru\n\n"
     "Мы помогаем:\n"
     "• с оплатой и активацией подписки;\n"
     "• с настройкой VPN на устройствах;\n"
