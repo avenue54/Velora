@@ -12,3 +12,7 @@ class RenewalState(StatesGroup):
 class ChangeTariffState(StatesGroup):
     choosing_tariff = State()
     choosing_period = State()
+
+
+class BroadcastState(StatesGroup):
+    waiting_message = State()

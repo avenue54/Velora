@@ -93,6 +93,16 @@ def create_database():
     except:
         pass
 
+    try:
+        cursor.execute(
+            """
+            ALTER TABLE subscriptions
+            ADD COLUMN reminded INTEGER DEFAULT 0
+            """
+        )
+    except:
+        pass
+
 
 
     # Добавление тарифов
@@ -831,3 +841,90 @@ def get_profile(telegram_id):
     conn.close()
 
     return profile
+
+
+# =========================
+# УВЕДОМЛЕНИЯ / РАССЫЛКА
+# =========================
+
+
+def get_all_telegram_ids():
+    """Все telegram_id пользователей для рассылки."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT telegram_id FROM users")
+    rows = cursor.fetchall()
+    conn.close()
+    return [r[0] for r in rows if r[0]]
+
+
+def get_subscription_user_telegram_id(subscription_id):
+    """Telegram ID владельца подписки."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT users.telegram_id
+        FROM subscriptions
+        JOIN users ON subscriptions.user_id = users.id
+        WHERE subscriptions.id = ?
+        """,
+        (subscription_id,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def get_expiring_subscriptions(hours=48):
+    """
+    Активные подписки, которые истекают в ближайшие `hours` часов
+    и по которым ещё не отправляли напоминание.
+    Возвращает: (subscription_id, telegram_id, plan, period, end_date)
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    now = datetime.now()
+    deadline = now + timedelta(hours=hours)
+
+    cursor.execute(
+        """
+        SELECT
+            subscriptions.id,
+            users.telegram_id,
+            subscriptions.plan,
+            subscriptions.period,
+            subscriptions.end_date
+        FROM subscriptions
+        JOIN users ON subscriptions.user_id = users.id
+        WHERE subscriptions.status = 'active'
+          AND subscriptions.end_date IS NOT NULL
+          AND COALESCE(subscriptions.reminded, 0) = 0
+          AND subscriptions.end_date > ?
+          AND subscriptions.end_date <= ?
+        """,
+        (
+            now.strftime("%Y-%m-%d %H:%M:%S"),
+            deadline.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def mark_subscription_reminded(subscription_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE subscriptions
+        SET reminded = 1
+        WHERE id = ?
+        """,
+        (subscription_id,)
+    )
+    conn.commit()
+    conn.close()

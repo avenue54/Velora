@@ -22,8 +22,12 @@ from keyboards import (
     platform_windows_keyboard,
     platform_macos_keyboard,
     get_config_keyboard,
-    guide_support_keyboard
+    guide_support_keyboard,
+    channel_subscribe_keyboard
 )
+from config import CHANNEL_USERNAME, CHANNEL_LINK
+from aiogram.enums import ChatMemberStatus
+from aiogram.types import CallbackQuery
 from texts import (
     WELCOME_TEXT,
     CONNECT_TEXT,
@@ -77,6 +81,24 @@ router = Router()
 # START
 # ======================
 
+async def check_channel_subscription(bot, user_id: int) -> bool:
+    """Проверка подписки на канал VELORA."""
+    try:
+        member = await bot.get_chat_member(
+            chat_id=CHANNEL_USERNAME,
+            user_id=user_id
+        )
+        return member.status in (
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.CREATOR,
+            ChatMemberStatus.RESTRICTED,
+        )
+    except Exception as e:
+        print(f"Channel check error: {e}")
+        return False
+
+
 @router.message(CommandStart())
 async def start(message: Message):
 
@@ -90,12 +112,54 @@ async def start(message: Message):
 
     print("БАЗА ОК")
 
+    subscribed = await check_channel_subscription(
+        message.bot,
+        message.from_user.id
+    )
+
+    if not subscribed:
+        await message.answer(
+            "👋 Добро пожаловать в VELORA!\n\n"
+            "Чтобы пользоваться ботом, подпишитесь на наш канал новостей:\n"
+            f"{CHANNEL_LINK}\n\n"
+            "После подписки нажмите «✅ Я подписался».",
+            reply_markup=channel_subscribe_keyboard()
+        )
+        return
+
     print("ОТПРАВЛЯЮ СООБЩЕНИЕ")
 
     await message.answer(
         WELCOME_TEXT,
         reply_markup=main_menu_reply_keyboard()
     )
+
+
+@router.callback_query(F.data == "check_subscription")
+async def check_subscription_callback(callback: CallbackQuery):
+
+    subscribed = await check_channel_subscription(
+        callback.bot,
+        callback.from_user.id
+    )
+
+    if not subscribed:
+        await callback.answer(
+            "Вы ещё не подписаны на канал. Подпишитесь и попробуйте снова.",
+            show_alert=True
+        )
+        return
+
+    await callback.message.edit_text(
+        "✅ Подписка подтверждена!"
+    )
+
+    await callback.message.answer(
+        WELCOME_TEXT,
+        reply_markup=main_menu_reply_keyboard()
+    )
+
+    await callback.answer()
 
 # ======================
 # ГЛАВНОЕ МЕНЮ
@@ -154,11 +218,11 @@ async def my_profile(message: Message):
     if not plan:
         await message.answer(
             "👤 Профиль VELORA\n\n"
-            f"🆔 Telegram ID: {telegram_id}\n"
-            f"📅 Регистрация: {created_at}\n\n"
+            f"Telegram ID: {telegram_id}\n"
+            f"Регистрация: {created_at}\n\n"
             "━━━━━━━━━━━━━━\n\n"
-            "📊 Твоя подписка:\n"
-            "❌ Нет активной подписки\n\n"
+            "Твоя подписка:\n"
+            "Нет активной подписки\n\n"
             "━━━━━━━━━━━━━━\n\n"
             "VELORA — безопасное подключение",
             reply_markup=profile_keyboard()
@@ -172,15 +236,15 @@ async def my_profile(message: Message):
 
     await message.answer(
         "👤 Профиль VELORA\n\n"
-        f"🆔 Telegram ID: {telegram_id}\n"
-        f"📅 Регистрация: {created_at}\n\n"
+        f"Telegram ID: {telegram_id}\n"
+        f"Регистрация: {created_at}\n\n"
         "━━━━━━━━━━━━━━\n\n"
-        "📊 Твоя подписка:\n"
-        f"📊 Статус: {subscription_status_text(status)}\n"
-        f"💳 Тариф: {plan}\n"
-        f"📅 Срок: {period}\n"
-        f"💰 Стоимость: {price}\n"
-        f"📱 Устройств: {devices_used or 0}"
+        "Твоя подписка:\n"
+        f"Статус: {subscription_status_text(status)}\n"
+        f"Тариф: {plan}\n"
+        f"Срок: {period}\n"
+        f"Стоимость: {price}\n"
+        f"Устройств: {devices_used or 0}"
         f"{expiry_line}\n\n"
         "━━━━━━━━━━━━━━\n\n"
         "VELORA — безопасное подключение",
