@@ -192,13 +192,13 @@ async def my_profile(message: Message):
     if not plan:
         await message.answer(
             "👤 Профиль VELORA\n\n"
-            f"Telegram ID: {telegram_id}\n"
-            f"Регистрация: {created_at}\n\n"
+            f"🆔 Telegram ID: {telegram_id}\n"
+            f"📅 Регистрация: {created_at}\n\n"
             "━━━━━━━━━━━━━━\n\n"
-            "Твоя подписка:\n"
+            "📊 Твоя подписка:\n"
             "Нет активной подписки\n\n"
             "━━━━━━━━━━━━━━\n\n"
-            "VELORA — безопасное подключение",
+            "⚡️ VELORA — безопасное подключение",
             reply_markup=profile_keyboard(),
         )
         return
@@ -209,18 +209,18 @@ async def my_profile(message: Message):
 
     await message.answer(
         "👤 Профиль VELORA\n\n"
-        f"Telegram ID: {telegram_id}\n"
-        f"Регистрация: {created_at}\n\n"
+        f"🆔 Telegram ID: {telegram_id}\n"
+        f"📅 Регистрация: {created_at}\n\n"
         "━━━━━━━━━━━━━━\n\n"
-        "Твоя подписка:\n"
-        f"Статус: {subscription_status_text(status)}\n"
-        f"Тариф: {plan}\n"
-        f"Срок: {period}\n"
-        f"Стоимость: {price}\n"
-        f"Устройств: {devices_used or 0}"
-        f"{expiry_line}\n\n"
+        "📊 Твоя подписка:\n"
+        f"📊 Статус: {subscription_status_text(status)}\n"
+        f"💳 Тариф: {plan}\n"
+        f"📅 Срок: {period}\n"
+        f"💰 Стоимость: {price}\n"
+        f"📱 Устройств: {devices_used or 0}"
+        f"🕒 {expiry_line}\n\n"
         "━━━━━━━━━━━━━━\n\n"
-        "VELORA — безопасное подключение",
+        "⚡️ VELORA — безопасное подключение",
         reply_markup=profile_keyboard(),
     )
 
