@@ -70,7 +70,7 @@ def guide_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="📱 iPhone / iPad"), KeyboardButton(text="🤖 Android")],
             [KeyboardButton(text="💻 Windows"), KeyboardButton(text="🍎 macOS")],
-            [KeyboardButton(text="⬅️ Назад"), KeyboardButton(text="🏠 Главное меню")],
+            [KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
     )

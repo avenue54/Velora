@@ -153,86 +153,47 @@ async def my_profile(message: Message):
 
 
     days_left = ""
-
+    expiry_str = ""
 
     if end_date:
-
-        end = datetime.strptime(
-            end_date,
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-
-        days = (
-            end - datetime.now()
-        ).days
-
-
+        end = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
+        days = (end - datetime.now()).days
         if days < 0:
             days = 0
-
-
-        days_left = (
-            f"\n⏳ Осталось: {days} дней"
-        )
-
-
+        expiry_str = end.strftime("%d.%m.%y в %H:%M МСК")
 
     if not plan:
-
         await message.answer(
-
             "👤 Профиль VELORA\n\n"
-
             f"🆔 Telegram ID:\n"
             f"{telegram_id}\n\n"
-
             f"📅 Регистрация:\n"
             f"{created_at}\n\n"
-
             "━━━━━━━━━━━━━━\n\n"
-
             "💳 Подписка:\n"
             "🔴 Нет активной подписки",
-
             reply_markup=profile_keyboard()
         )
-
         return
 
-
-
+    expiry_line = f"\nИстекает {expiry_str}" if status == "active" and expiry_str else ""
 
     await message.answer(
-
         "👤 Профиль VELORA\n\n"
-
         f"🆔 Telegram ID:\n"
         f"{telegram_id}\n\n"
-
         f"📅 Регистрация:\n"
         f"{created_at}\n\n"
-
         "━━━━━━━━━━━━━━\n\n"
-
         "📊 Твоя подписка:\n\n"
-
         f"📊 Статус: {subscription_status_text(status)}\n"
-
         f"💳 Тариф: {plan}\n"
-
         f"📅 Срок: {period}\n"
-
         f"💰 Стоимость: {price}\n"
-
-        f"📱 Устройств: {devices_used}\n"
-
-        f"{days_left}\n\n"
-
+        f"📱 Устройств: {devices_used or 0}"
+        f"{expiry_line}\n\n"
         "━━━━━━━━━━━━━━\n\n"
-
         "🚀 VELORA — безопасное подключение",
-
         reply_markup=profile_keyboard()
     )
 
