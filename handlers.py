@@ -25,6 +25,8 @@ from keyboards import (
     guide_support_keyboard,
     payment_keyboard,
     payment_pay_keyboard,
+    documents_keyboard,
+    document_link_keyboard,
 )
 from texts import (
     WELCOME_TEXT,
@@ -54,7 +56,14 @@ from texts import (
     GUIDE_WINDOWS_TEXT,
     GUIDE_MACOS_TEXT,
     GET_CONFIG_TEXT,
-    GUIDE_SUPPORT_TEXT
+    GUIDE_SUPPORT_TEXT,
+    DOCUMENTS_MENU_TEXT,
+    PRIVACY_POLICY_TEXT,
+    USER_AGREEMENT_TEXT,
+    PRICES_PUBLIC_TEXT,
+    SUPPORT_CONTACTS_TEXT,
+    PRIVACY_POLICY_URL,
+    USER_AGREEMENT_URL,
 )
 from database import (
     add_user,
@@ -330,6 +339,64 @@ async def servers_info(message: Message):
     await message.answer(
         SERVERS_INFO_TEXT,
         reply_markup=about_vpn_keyboard()
+    )
+
+
+# ======================
+# ДОКУМЕНТЫ
+# ======================
+
+@router.message(F.text == "📄 Документы")
+async def documents_menu(message: Message):
+    await message.answer(
+        DOCUMENTS_MENU_TEXT,
+        reply_markup=documents_keyboard(),
+    )
+
+
+@router.message(F.text == "🔒 Политика конфиденциальности")
+async def privacy_policy(message: Message):
+    await message.answer(
+        PRIVACY_POLICY_TEXT,
+        reply_markup=document_link_keyboard(
+            PRIVACY_POLICY_URL,
+            "🔒 Открыть политику",
+        ),
+    )
+    await message.answer(
+        "Выберите документ:",
+        reply_markup=documents_keyboard(),
+    )
+
+
+@router.message(F.text == "📜 Пользовательское соглашение")
+async def user_agreement(message: Message):
+    await message.answer(
+        USER_AGREEMENT_TEXT,
+        reply_markup=document_link_keyboard(
+            USER_AGREEMENT_URL,
+            "📜 Открыть соглашение",
+        ),
+    )
+    await message.answer(
+        "Выберите документ:",
+        reply_markup=documents_keyboard(),
+    )
+
+
+@router.message(F.text == "💰 Цены и тарифы")
+async def prices_public(message: Message):
+    await message.answer(
+        PRICES_PUBLIC_TEXT,
+        reply_markup=documents_keyboard(),
+    )
+
+
+@router.message(F.text == "💬 Контакты поддержки")
+async def support_contacts(message: Message):
+    await message.answer(
+        SUPPORT_CONTACTS_TEXT,
+        reply_markup=documents_keyboard(),
     )
 
 
