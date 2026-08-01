@@ -7,7 +7,8 @@ from database import (
     get_all_subscriptions,
     get_statistics,
     get_subscriptions,
-    update_subscription_status
+    update_subscription_status,
+    activate_subscription
 )
 
 from keyboard_admin import (
@@ -169,10 +170,7 @@ async def activate_subscription(callback: CallbackQuery):
 
     print("АКТИВАЦИЯ:", subscription_id)
 
-    update_subscription_status(
-        subscription_id,
-        "active"
-    )
+    activate_subscription(subscription_id)
 
     await callback.message.delete()
 
@@ -210,5 +208,3 @@ async def reject_subscription(callback: CallbackQuery):
     )
 
     await callback.answer()
-    
-
