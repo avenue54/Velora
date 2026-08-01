@@ -23,9 +23,7 @@ from keyboards import (
     platform_macos_keyboard,
     get_config_keyboard,
     guide_support_keyboard,
-    documents_keyboard,
-    privacy_policy_keyboard,
-    user_agreement_keyboard
+    payment_keyboard
 )
 from texts import (
     WELCOME_TEXT,
@@ -55,12 +53,7 @@ from texts import (
     GUIDE_WINDOWS_TEXT,
     GUIDE_MACOS_TEXT,
     GET_CONFIG_TEXT,
-    GUIDE_SUPPORT_TEXT,
-    DOCUMENTS_MENU_TEXT,
-    PRIVACY_POLICY_TEXT,
-    USER_AGREEMENT_TEXT,
-    PRICES_PUBLIC_TEXT,
-    SUPPORT_CONTACTS_TEXT
+    GUIDE_SUPPORT_TEXT
 )
 from database import (
     add_user,
@@ -76,7 +69,13 @@ from database import (
 from aiogram.fsm.context import FSMContext
 from states import SubscriptionState, RenewalState, ChangeTariffState
 
-from services import subscription_status_text
+from services import (
+    subscription_status_text,
+    create_order,
+    get_order_screen_text,
+    payment_pay_stub_text,
+    payment_check_stub_text,
+)
 
 router = Router()
 
@@ -429,43 +428,28 @@ async def pro_tariff(
 # ПОКУПКА
 # ======================
 
-@router.message(F.text.contains("месяц"))
+@router.message(SubscriptionState.choosing_period, F.text.contains("месяц"))
 async def buy_tariff(
     message: Message,
     state: FSMContext
 ):
 
     data = await state.get_data()
-
     plan_name = data.get("plan")
 
-
     if not plan_name:
-        await message.answer(
-            "❌ Тариф не выбран"
-        )
+        await message.answer("❌ Тариф не выбран")
         return
-
 
     parts = message.text.split(" — ")
-
     if len(parts) != 2:
-        await message.answer(
-            "❌ Некорректный выбор тарифа"
-        )
+        await message.answer("❌ Некорректный выбор тарифа")
         return
-
 
     period = parts[0]
     price = parts[1]
 
-
-    plan = get_plan_by_period(
-        plan_name,
-        period
-    )
-
-
+    plan = get_plan_by_period(plan_name, period)
     if not plan:
         await message.answer(
             f"❌ Тариф не найден\n\n"
@@ -474,26 +458,27 @@ async def buy_tariff(
         )
         return
 
-
-    create_subscription(
+    # Не создаём подписку — только платёж (заказ)
+    payment_id = create_order(
         telegram_id=message.from_user.id,
         plan=plan[1],
         period=plan[4],
-        price=plan[5]
+        amount=plan[5],
     )
-
-
-    await message.answer(
-        "✅ Заявка создана\n\n"
-        f"💳 Тариф: {plan[1]}\n"
-        f"📅 Срок: {plan[4]}\n"
-        f"💰 Цена: {plan[5]}\n\n"
-        "Статус: ожидание оплаты",
-        reply_markup=after_price_keyboard()
-    )
-
 
     await state.clear()
+
+    await message.answer(
+        get_order_screen_text(
+            plan=plan[1],
+            period=plan[4],
+            amount=plan[5],
+            status="pending",
+        ),
+        reply_markup=payment_keyboard(),
+    )
+
+
 # ======================
 # ПРОДЛЕНИЕ ПОДПИСКИ
 # ======================
@@ -538,33 +523,32 @@ async def renewal_period_chosen(message: Message, state: FSMContext):
     data = await state.get_data()
     plan_name = data.get("plan")
 
-    text = message.text.replace("🔄 ", "")
+    text = message.text.replace("🔄 ", "", 1)
     parts = text.split(" — ")
-
     if len(parts) != 2:
         await message.answer("❌ Некорректный выбор. Попробуйте снова.")
         return
 
-    period = parts[0]
-    price = parts[1]
+    period, price = parts[0], parts[1]
 
-    create_subscription(
+    create_order(
         telegram_id=message.from_user.id,
         plan=plan_name,
         period=period,
-        price=price
-    )
-
-    await message.answer(
-        f"✅ Заявка на продление создана\n\n"
-        f"💳 Тариф: {plan_name}\n"
-        f"📅 Срок: +{period}\n"
-        f"💰 Стоимость: {price}\n\n"
-        f"Статус: ожидание оплаты",
-        reply_markup=profile_keyboard()
+        amount=price,
     )
 
     await state.clear()
+
+    await message.answer(
+        get_order_screen_text(
+            plan=plan_name,
+            period=period,
+            amount=price,
+            status="pending",
+        ),
+        reply_markup=payment_keyboard(),
+    )
 
 
 # ======================
@@ -634,26 +618,26 @@ async def change_tariff_period_chosen(message: Message, state: FSMContext):
         await message.answer("❌ Некорректный выбор. Попробуйте снова.")
         return
 
-    period = parts[0]
-    price = parts[1]
+    period, price = parts[0], parts[1]
 
-    create_subscription(
+    create_order(
         telegram_id=message.from_user.id,
         plan=new_plan,
         period=period,
-        price=price
-    )
-
-    await message.answer(
-        f"✅ Заявка на смену тарифа создана\n\n"
-        f"💳 Тариф: {new_plan}\n"
-        f"📅 Срок: {period}\n"
-        f"💰 Стоимость: {price}\n\n"
-        f"Статус: ожидание оплаты",
-        reply_markup=profile_keyboard()
+        amount=price,
     )
 
     await state.clear()
+
+    await message.answer(
+        get_order_screen_text(
+            plan=new_plan,
+            period=period,
+            amount=price,
+            status="pending",
+        ),
+        reply_markup=payment_keyboard(),
+    )
 
 
 # ======================
@@ -700,62 +684,22 @@ async def back_to_guide(message: Message):
 
 
 # ======================
-# ДОКУМЕНТЫ (через О VPN)
+# ОПЛАТА (Platega-ready stubs)
 # ======================
 
-@router.message(F.text == "📄 Документы")
-async def documents_menu(message: Message):
+@router.message(F.text == "💳 Оплатить")
+async def pay_button(message: Message):
     await message.answer(
-        DOCUMENTS_MENU_TEXT,
-        reply_markup=documents_keyboard()
+        payment_pay_stub_text(),
+        reply_markup=payment_keyboard(),
     )
 
 
-@router.message(F.text == "🔒 Политика конфиденциальности")
-async def privacy_policy(message: Message):
+@router.message(F.text == "🔄 Проверить оплату")
+async def check_payment_button(message: Message):
     await message.answer(
-        PRIVACY_POLICY_TEXT,
-        reply_markup=privacy_policy_keyboard()
-    )
-    await message.answer(
-        "Навигация:",
-        reply_markup=documents_keyboard()
-    )
-
-
-@router.message(F.text == "📜 Пользовательское соглашение")
-async def user_agreement(message: Message):
-    await message.answer(
-        USER_AGREEMENT_TEXT,
-        reply_markup=user_agreement_keyboard()
-    )
-    await message.answer(
-        "Навигация:",
-        reply_markup=documents_keyboard()
-    )
-
-
-@router.message(F.text == "💰 Цены и тарифы")
-async def prices_public(message: Message):
-    await message.answer(
-        PRICES_PUBLIC_TEXT,
-        reply_markup=documents_keyboard()
-    )
-
-
-@router.message(F.text == "📋 Контакты поддержки")
-async def support_contacts(message: Message):
-    await message.answer(
-        SUPPORT_CONTACTS_TEXT,
-        reply_markup=documents_keyboard()
-    )
-
-
-@router.message(F.text == "⬅️ Назад к О VPN")
-async def back_to_about_vpn(message: Message):
-    await message.answer(
-        ABOUT_VPN_TEXT,
-        reply_markup=about_vpn_keyboard()
+        payment_check_stub_text(),
+        reply_markup=payment_keyboard(),
     )
 
 

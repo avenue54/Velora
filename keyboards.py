@@ -255,7 +255,6 @@ def about_vpn_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🛡️ Конфиденциальность")],
             [KeyboardButton(text="⚡ Производительность")],
             [KeyboardButton(text="🌍 Серверы VELORA")],
-            [KeyboardButton(text="📄 Документы")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
@@ -325,37 +324,15 @@ def profile_keyboard() -> ReplyKeyboardMarkup:
 
     return keyboard
 
-def documents_keyboard() -> ReplyKeyboardMarkup:
+
+def payment_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🔒 Политика конфиденциальности")],
-            [KeyboardButton(text="📜 Пользовательское соглашение")],
-            [KeyboardButton(text="💰 Цены и тарифы")],
-            [KeyboardButton(text="📋 Контакты поддержки")],
-            [KeyboardButton(text="⬅️ Назад к О VPN")],
+            [KeyboardButton(text="💳 Оплатить")],
+            [KeyboardButton(text="🔄 Проверить оплату")],
+            [KeyboardButton(text="⬅️ Изменить тариф")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
     )
     return keyboard
-
-
-def privacy_policy_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text="📄 Открыть полный текст",
-        url="https://telegra.ph/Politika-konfidencialnosti-VELORA-08-01",
-    )
-    builder.adjust(1)
-    return builder.as_markup()
-
-
-def user_agreement_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text="📄 Открыть полный текст",
-        url="https://telegra.ph/Polzovatelskoe-soglashenie-VELORA-08-01",
-    )
-    builder.adjust(1)
-    return builder.as_markup()
-
