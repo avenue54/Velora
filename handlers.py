@@ -23,7 +23,9 @@ from keyboards import (
     platform_macos_keyboard,
     get_config_keyboard,
     guide_support_keyboard,
-    documents_keyboard
+    documents_keyboard,
+    privacy_policy_keyboard,
+    user_agreement_keyboard
 )
 from texts import (
     WELCOME_TEXT,
@@ -713,6 +715,10 @@ async def documents_menu(message: Message):
 async def privacy_policy(message: Message):
     await message.answer(
         PRIVACY_POLICY_TEXT,
+        reply_markup=privacy_policy_keyboard()
+    )
+    await message.answer(
+        "Навигация:",
         reply_markup=documents_keyboard()
     )
 
@@ -721,6 +727,10 @@ async def privacy_policy(message: Message):
 async def user_agreement(message: Message):
     await message.answer(
         USER_AGREEMENT_TEXT,
+        reply_markup=user_agreement_keyboard()
+    )
+    await message.answer(
+        "Навигация:",
         reply_markup=documents_keyboard()
     )
 

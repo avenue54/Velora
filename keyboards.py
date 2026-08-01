@@ -338,3 +338,24 @@ def documents_keyboard() -> ReplyKeyboardMarkup:
         resize_keyboard=True
     )
     return keyboard
+
+
+def privacy_policy_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="📄 Открыть полный текст",
+        url="https://telegra.ph/Politika-konfidencialnosti-VELORA-08-01",
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def user_agreement_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="📄 Открыть полный текст",
+        url="https://telegra.ph/Polzovatelskoe-soglashenie-VELORA-08-01",
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
