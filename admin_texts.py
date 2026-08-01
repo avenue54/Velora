@@ -4,18 +4,15 @@ ADMIN_PANEL_TEXT = """
 Выберите действие:
 """
 
-
 USERS_LIST_TEXT = """
 👥 Список пользователей:
 
 """
 
-
 SUBSCRIPTIONS_LIST_TEXT = """
 💳 Список подписок:
 
 """
-
 
 SUBSCRIPTION_ACTIVE_TEXT = """
 ✅ Подписка активирована
@@ -23,16 +20,13 @@ SUBSCRIPTION_ACTIVE_TEXT = """
 Пользователь получит доступ.
 """
 
-
 SUBSCRIPTION_REJECT_TEXT = """
 ❌ Подписка отклонена
 """
 
-
 NO_ACCESS_TEXT = """
 ⛔ У вас нет доступа к админ панели.
 """
-
 
 STATISTICS_TEXT = """
 📊 Статистика VELORA
@@ -49,7 +43,6 @@ STATISTICS_TEXT = """
 ⏳ Ожидают оплаты:
 {pending}
 """
-
 
 SUBSCRIPTIONS_TEXT = """
 💳 Заявки VELORA

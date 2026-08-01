@@ -1,13 +1,8 @@
-def subscription_status_text(status):
-
+def subscription_status_text(status: str) -> str:
     if status == "active":
         return "🟢 Активна"
-
-    elif status == "pending":
+    if status == "pending":
         return "🟡 Ожидает подтверждения"
-
-    elif status == "rejected":
+    if status == "rejected":
         return "🔴 Не оплачена"
-
-    else:
-        return "⚪ Неизвестно"
+    return "⚪ Неизвестно"

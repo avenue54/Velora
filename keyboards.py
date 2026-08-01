@@ -1,253 +1,216 @@
-from aiogram.types import *
+from aiogram.types import (
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    InlineKeyboardMarkup,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
-
-def main_menu_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🚀 Подключиться", callback_data="menu:connect")
-    builder.button(text="👤 Мой аккаунт", callback_data="menu:account")
-    builder.button(text="💳 Тарифы", callback_data="menu:tariffs")
-    builder.button(text="🌍 Серверы", callback_data="menu:servers")
-    builder.button(text="📖 Инструкция", callback_data="menu:guide")
-    builder.button(text="💬 Поддержка", callback_data="menu:support")
-    builder.button(text="⚙️ Настройки", callback_data="menu:settings")
-    builder.adjust(1)
-    return builder.as_markup()
-
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-
 def main_menu_reply_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🚀 Подключиться")],
-            [KeyboardButton(text="👤 Мой аккаунт"), KeyboardButton(text="💳 Тарифы")],
-            [KeyboardButton(text="🌍 Серверы"), KeyboardButton(text="📖 Инструкция")],
-            [KeyboardButton(text="💬 Поддержка"), KeyboardButton(text="🛡️ О VPN")],
+            [
+                KeyboardButton(text="👤 Мой аккаунт"),
+                KeyboardButton(text="💳 Тарифы"),
+            ],
+            [
+                KeyboardButton(text="🌍 Серверы"),
+                KeyboardButton(text="📖 Инструкция"),
+            ],
+            [
+                KeyboardButton(text="💬 Поддержка"),
+                KeyboardButton(text="🛡️ О VPN"),
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
+
 
 def tariffs_reply_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [
                 KeyboardButton(text="🟢 Start"),
                 KeyboardButton(text="🔵 Plus ⭐"),
-                KeyboardButton(text="🟣 Pro")
+                KeyboardButton(text="🟣 Pro"),
             ],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
-
 
 
 def after_price_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="⬅️ Изменить тариф")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
+
 
 def connect_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="💳 Выбрать тариф")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
+
 
 def guide_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📱 iPhone / iPad"), KeyboardButton(text="🤖 Android")],
-            [KeyboardButton(text="💻 Windows"), KeyboardButton(text="🍎 macOS")],
+            [
+                KeyboardButton(text="📱 iPhone / iPad"),
+                KeyboardButton(text="🤖 Android"),
+            ],
+            [
+                KeyboardButton(text="💻 Windows"),
+                KeyboardButton(text="🍎 macOS"),
+            ],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def platform_ios_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📥 Получить конфигурацию")],
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ К выбору платформы"), KeyboardButton(text="🏠 Главное меню")],
+            [
+                KeyboardButton(text="⬅️ К выбору платформы"),
+                KeyboardButton(text="🏠 Главное меню"),
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def platform_android_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📥 Получить конфигурацию")],
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ К выбору платформы"), KeyboardButton(text="🏠 Главное меню")],
+            [
+                KeyboardButton(text="⬅️ К выбору платформы"),
+                KeyboardButton(text="🏠 Главное меню"),
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def platform_windows_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📥 Получить конфигурацию")],
             [KeyboardButton(text="🌍 Выбрать сервер")],
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ К выбору платформы"), KeyboardButton(text="🏠 Главное меню")],
+            [
+                KeyboardButton(text="⬅️ К выбору платформы"),
+                KeyboardButton(text="🏠 Главное меню"),
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def platform_macos_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📥 Получить конфигурацию")],
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ К выбору платформы"), KeyboardButton(text="🏠 Главное меню")],
+            [
+                KeyboardButton(text="⬅️ К выбору платформы"),
+                KeyboardButton(text="🏠 Главное меню"),
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def get_config_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="💳 Выбрать тариф")],
             [KeyboardButton(text="👤 Мой аккаунт")],
-            [KeyboardButton(text="⬅️ Назад"), KeyboardButton(text="🏠 Главное меню")],
+            [
+                KeyboardButton(text="⬅️ Назад"),
+                KeyboardButton(text="🏠 Главное меню"),
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def guide_support_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ Назад"), KeyboardButton(text="🏠 Главное меню")],
+            [
+                KeyboardButton(text="⬅️ Назад"),
+                KeyboardButton(text="🏠 Главное меню"),
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
-
-def back_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="⬅️ Назад")],
-            [KeyboardButton(text="🏠 Главное меню")],
-        ],
-        resize_keyboard=True
-    )
-    return keyboard
 
 
-
-
-def plans_keyboard(plans):
-
+def plans_keyboard(plans) -> ReplyKeyboardMarkup:
     keyboard = []
-
     added = set()
-
-
     for plan in plans:
-
         name = plan[1]
-
-
         if name not in added:
-
-            keyboard.append(
-                [
-                    KeyboardButton(
-                        text=(
-                            "🟢 Start"
-                            if name == "Start"
-                            else
-                            "🔵 Plus ⭐"
-                            if name == "Plus"
-                            else
-                            "🟣 Pro"
-                        )
-                    )
-                ]
-            )
-
+            label = {
+                "Start": "🟢 Start",
+                "Plus": "🔵 Plus ⭐",
+                "Pro": "🟣 Pro",
+            }.get(name, name)
+            keyboard.append([KeyboardButton(text=label)])
             added.add(name)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard,
-        resize_keyboard=True
-    )
-
-def period_keyboard(plans):
-
+def period_keyboard(plans) -> ReplyKeyboardMarkup:
     keyboard = []
-
     for plan in plans:
         keyboard.append(
-            [
-                KeyboardButton(
-                    text=f"{plan[4]} — {plan[5]}"
-                )
-            ]
+            [KeyboardButton(text=f"{plan[4]} — {plan[5]}")]
         )
+    keyboard.append([KeyboardButton(text="⬅️ Назад")])
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
-    keyboard.append(
-        [
-            KeyboardButton(text="⬅️ Назад")
-        ]
-    )
 
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard,
-        resize_keyboard=True
-    )
-    
-    
 def support_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="💬 Написать в поддержку")],
             [KeyboardButton(text="🛡️ О VPN")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def contact_dev_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
         text="👨‍💻 Связаться с поддержкой",
-        url="https://t.me/Velora_Supports"
+        url="https://t.me/Velora_Supports",
     )
     builder.adjust(1)
     return builder.as_markup()
 
 
 def about_vpn_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🚀 О VELORA")],
             [KeyboardButton(text="❓ Что такое VPN")],
@@ -257,15 +220,16 @@ def about_vpn_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🌍 Серверы VELORA")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def renewal_period_keyboard(plans) -> ReplyKeyboardMarkup:
     keyboard = []
     for plan in plans:
-        keyboard.append([KeyboardButton(text=f"🔄 {plan[4]} — {plan[5]}")])
+        keyboard.append(
+            [KeyboardButton(text=f"🔄 {plan[4]} — {plan[5]}")]
+        )
     keyboard.append([KeyboardButton(text="⬅️ Назад")])
     keyboard.append([KeyboardButton(text="🏠 Главное меню")])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -287,53 +251,35 @@ def change_tariff_keyboard(current_plan: str) -> ReplyKeyboardMarkup:
 
 
 def devices_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🏠 Главное меню")],
-        ],
-        resize_keyboard=True
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="🏠 Главное меню")]],
+        resize_keyboard=True,
     )
-    return keyboard
 
 
 def profile_keyboard() -> ReplyKeyboardMarkup:
-
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(
-                    text="🔄 Продлить подписку"
-                ),
-                KeyboardButton(
-                    text="💳 Изменить тариф"
-                )
+                KeyboardButton(text="🔄 Продлить подписку"),
+                KeyboardButton(text="💳 Изменить тариф"),
             ],
-            [
-                KeyboardButton(
-                    text="⚙️ Устройства"
-                )
-            ],
-            [
-                KeyboardButton(
-                    text="🏠 Главное меню"
-                )
-            ]
+            [KeyboardButton(text="⚙️ Устройства")],
+            [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
-
-    return keyboard
 
 
 def channel_subscribe_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
         text="📢 Подписаться на канал",
-        url="https://t.me/Velora_news"
+        url="https://t.me/Velora_news",
     )
     builder.button(
         text="✅ Я подписался",
-        callback_data="check_subscription"
+        callback_data="check_subscription",
     )
     builder.adjust(1)
     return builder.as_markup()
