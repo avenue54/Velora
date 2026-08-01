@@ -24,6 +24,7 @@ from keyboards import (
     get_config_keyboard,
     guide_support_keyboard,
     payment_keyboard,
+    payment_pay_keyboard,
 )
 from texts import (
     WELCOME_TEXT,
@@ -475,6 +476,10 @@ async def buy_tariff(
             amount=plan[5],
             status="pending",
         ),
+        reply_markup=payment_pay_keyboard(),
+    )
+    await message.answer(
+        "Доступные действия 👇",
         reply_markup=payment_keyboard(),
     )
 
@@ -547,6 +552,10 @@ async def renewal_period_chosen(message: Message, state: FSMContext):
             amount=price,
             status="pending",
         ),
+        reply_markup=payment_pay_keyboard(),
+    )
+    await message.answer(
+        "Доступные действия 👇",
         reply_markup=payment_keyboard(),
     )
 
@@ -636,6 +645,10 @@ async def change_tariff_period_chosen(message: Message, state: FSMContext):
             amount=price,
             status="pending",
         ),
+        reply_markup=payment_pay_keyboard(),
+    )
+    await message.answer(
+        "Доступные действия 👇",
         reply_markup=payment_keyboard(),
     )
 
@@ -690,30 +703,17 @@ async def back_to_guide(message: Message):
 @router.callback_query(F.data == "payment:pay")
 async def pay_button(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.answer(payment_pay_stub_text())
-
-
-@router.callback_query(F.data == "payment:check")
-async def check_payment_button(callback: CallbackQuery):
-    await callback.answer()
-    await callback.message.answer(payment_check_stub_text())
-
-
-@router.callback_query(F.data == "payment:change_tariff")
-async def payment_change_tariff(callback: CallbackQuery):
-    await callback.answer()
     await callback.message.answer(
-        TARIFFS_TEXT,
-        reply_markup=tariffs_reply_keyboard(),
+        payment_pay_stub_text(),
+        reply_markup=payment_keyboard(),
     )
 
 
-@router.callback_query(F.data == "payment:main_menu")
-async def payment_main_menu(callback: CallbackQuery):
-    await callback.answer()
-    await callback.message.answer(
-        MAIN_MENU_TEXT,
-        reply_markup=main_menu_reply_keyboard(),
+@router.message(F.text == "🔄 Проверить оплату")
+async def check_payment_button(message: Message):
+    await message.answer(
+        payment_check_stub_text(),
+        reply_markup=payment_keyboard(),
     )
 
 
