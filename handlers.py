@@ -13,7 +13,16 @@ from keyboards import (
     profile_keyboard,
     about_vpn_keyboard,
     support_keyboard,
-    contact_dev_keyboard
+    contact_dev_keyboard,
+    renewal_period_keyboard,
+    change_tariff_keyboard,
+    devices_keyboard,
+    platform_ios_keyboard,
+    platform_android_keyboard,
+    platform_windows_keyboard,
+    platform_macos_keyboard,
+    get_config_keyboard,
+    guide_support_keyboard
 )
 from texts import (
     WELCOME_TEXT,
@@ -37,7 +46,13 @@ from texts import (
     PERFORMANCE_TEXT,
     SERVERS_INFO_TEXT,
     SUPPORT_MAIN_TEXT,
-    CONTACT_DEV_TEXT
+    CONTACT_DEV_TEXT,
+    GUIDE_IPHONE_TEXT,
+    GUIDE_ANDROID_TEXT,
+    GUIDE_WINDOWS_TEXT,
+    GUIDE_MACOS_TEXT,
+    GET_CONFIG_TEXT,
+    GUIDE_SUPPORT_TEXT
 )
 from database import (
     add_user,
@@ -51,7 +66,7 @@ from database import (
 )
 
 from aiogram.fsm.context import FSMContext
-from states import SubscriptionState
+from states import SubscriptionState, RenewalState, ChangeTariffState
 
 from services import subscription_status_text
 
@@ -233,6 +248,54 @@ async def guide(message: Message):
     await message.answer(
         GUIDE_TEXT,
         reply_markup=guide_keyboard()
+    )
+
+
+@router.message(F.text == "📱 iPhone / iPad")
+async def guide_iphone(message: Message):
+    await message.answer(
+        GUIDE_IPHONE_TEXT,
+        reply_markup=platform_ios_keyboard()
+    )
+
+
+@router.message(F.text == "🤖 Android")
+async def guide_android(message: Message):
+    await message.answer(
+        GUIDE_ANDROID_TEXT,
+        reply_markup=platform_android_keyboard()
+    )
+
+
+@router.message(F.text == "💻 Windows")
+async def guide_windows(message: Message):
+    await message.answer(
+        GUIDE_WINDOWS_TEXT,
+        reply_markup=platform_windows_keyboard()
+    )
+
+
+@router.message(F.text == "🍎 macOS")
+async def guide_macos(message: Message):
+    await message.answer(
+        GUIDE_MACOS_TEXT,
+        reply_markup=platform_macos_keyboard()
+    )
+
+
+@router.message(F.text == "📥 Получить конфигурацию")
+async def get_config(message: Message):
+    await message.answer(
+        GET_CONFIG_TEXT,
+        reply_markup=get_config_keyboard()
+    )
+
+
+@router.message(F.text == "💬 Поддержка по настройке")
+async def guide_support(message: Message):
+    await message.answer(
+        GUIDE_SUPPORT_TEXT,
+        reply_markup=guide_support_keyboard()
     )
 
 
@@ -462,6 +525,202 @@ async def buy_tariff(
 
 
     await state.clear()
+# ======================
+# ПРОДЛЕНИЕ ПОДПИСКИ
+# ======================
+
+@router.message(F.text == "🔄 Продлить подписку")
+async def renew_subscription(message: Message, state: FSMContext):
+    profile = get_profile(message.from_user.id)
+
+    if not profile or not profile[3] or profile[6] != "active":
+        await message.answer(
+            "❌ У вас нет активной подписки для продления.\n\n"
+            "Перейдите в раздел 💳 Тарифы для оформления.",
+            reply_markup=profile_keyboard()
+        )
+        return
+
+    plan = profile[3]
+    end_date = profile[8]
+    days_left = 0
+
+    if end_date:
+        end = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
+        days_left = max(0, (end - datetime.now()).days)
+
+    plans = get_plans_by_name(plan)
+
+    await state.update_data(plan=plan)
+    await state.set_state(RenewalState.choosing_period)
+
+    await message.answer(
+        f"🔄 Продление подписки\n\n"
+        f"Ваша текущая подписка:\n\n"
+        f"💳 Тариф: {plan}\n"
+        f"📅 Осталось: {days_left} дней\n\n"
+        f"Выберите срок продления:",
+        reply_markup=renewal_period_keyboard(plans)
+    )
+
+
+@router.message(RenewalState.choosing_period, F.text.startswith("🔄"))
+async def renewal_period_chosen(message: Message, state: FSMContext):
+    data = await state.get_data()
+    plan_name = data.get("plan")
+
+    text = message.text.replace("🔄 ", "")
+    parts = text.split(" — ")
+
+    if len(parts) != 2:
+        await message.answer("❌ Некорректный выбор. Попробуйте снова.")
+        return
+
+    period = parts[0]
+    price = parts[1]
+
+    create_subscription(
+        telegram_id=message.from_user.id,
+        plan=plan_name,
+        period=period,
+        price=price
+    )
+
+    await message.answer(
+        f"✅ Заявка на продление создана\n\n"
+        f"💳 Тариф: {plan_name}\n"
+        f"📅 Срок: +{period}\n"
+        f"💰 Стоимость: {price}\n\n"
+        f"Статус: ожидание оплаты",
+        reply_markup=profile_keyboard()
+    )
+
+    await state.clear()
+
+
+# ======================
+# ИЗМЕНЕНИЕ ТАРИФА
+# ======================
+
+@router.message(F.text == "💳 Изменить тариф")
+async def change_tariff(message: Message, state: FSMContext):
+    profile = get_profile(message.from_user.id)
+
+    if not profile or not profile[3]:
+        await message.answer(
+            "❌ У вас нет активной подписки.\n\n"
+            "Перейдите в раздел 💳 Тарифы для оформления.",
+            reply_markup=profile_keyboard()
+        )
+        return
+
+    current_plan = profile[3]
+
+    await state.update_data(current_plan=current_plan)
+    await state.set_state(ChangeTariffState.choosing_tariff)
+
+    plan_emoji = {"Start": "🟢", "Plus": "🔵", "Pro": "🟣"}
+    emoji = plan_emoji.get(current_plan, "")
+
+    await message.answer(
+        f"💳 Изменение тарифа\n\n"
+        f"Текущий тариф:\n"
+        f"{emoji} {current_plan}\n\n"
+        f"Выберите новый тариф:",
+        reply_markup=change_tariff_keyboard(current_plan)
+    )
+
+
+@router.message(ChangeTariffState.choosing_tariff, F.text.in_({"🟢 Start", "🔵 Plus ⭐", "🟣 Pro"}))
+async def new_tariff_chosen(message: Message, state: FSMContext):
+    data = await state.get_data()
+    current_plan = data.get("current_plan")
+
+    name_map = {"🟢 Start": "Start", "🔵 Plus ⭐": "Plus", "🟣 Pro": "Pro"}
+    new_plan = name_map[message.text]
+
+    plans = get_plans_by_name(new_plan)
+
+    await state.update_data(new_plan=new_plan)
+    await state.set_state(ChangeTariffState.choosing_period)
+
+    plan_emoji = {"Start": "🟢", "Plus": "🔵", "Pro": "🟣"}
+
+    await message.answer(
+        f"💳 Новый тариф:\n\n"
+        f"Было:\n{plan_emoji.get(current_plan, '')} {current_plan}\n\n"
+        f"Стало:\n{plan_emoji.get(new_plan, '')} {new_plan}\n\n"
+        f"Выберите срок:",
+        reply_markup=period_keyboard(plans)
+    )
+
+
+@router.message(ChangeTariffState.choosing_period, F.text.contains("месяц"))
+async def change_tariff_period_chosen(message: Message, state: FSMContext):
+    data = await state.get_data()
+    new_plan = data.get("new_plan")
+
+    parts = message.text.split(" — ")
+    if len(parts) != 2:
+        await message.answer("❌ Некорректный выбор. Попробуйте снова.")
+        return
+
+    period = parts[0]
+    price = parts[1]
+
+    create_subscription(
+        telegram_id=message.from_user.id,
+        plan=new_plan,
+        period=period,
+        price=price
+    )
+
+    await message.answer(
+        f"✅ Заявка на смену тарифа создана\n\n"
+        f"💳 Тариф: {new_plan}\n"
+        f"📅 Срок: {period}\n"
+        f"💰 Стоимость: {price}\n\n"
+        f"Статус: ожидание оплаты",
+        reply_markup=profile_keyboard()
+    )
+
+    await state.clear()
+
+
+# ======================
+# УСТРОЙСТВА
+# ======================
+
+@router.message(F.text == "⚙️ Устройства")
+async def devices(message: Message):
+    profile = get_profile(message.from_user.id)
+
+    if not profile or not profile[3]:
+        await message.answer(
+            "⚙️ Устройства\n\n"
+            "❌ У вас нет активной подписки.\n\n"
+            "Для подключения устройств необходимо оформить подписку.",
+            reply_markup=profile_keyboard()
+        )
+        return
+
+    plan = profile[3]
+    devices_used = profile[9] or 0
+
+    max_devices = {"Start": 2, "Plus": 5, "Pro": 10}
+    limit = max_devices.get(plan, 0)
+
+    await message.answer(
+        f"⚙️ Устройства\n\n"
+        f"Ваши устройства:\n\n"
+        f"Использовано:\n"
+        f"{devices_used} / {limit} устройств\n\n"
+        f"Вы можете подключать VPN на нескольких устройствах одновременно "
+        f"в рамках вашего тарифа.",
+        reply_markup=devices_keyboard()
+    )
+
+
 # ======================
 # НАВИГАЦИЯ
 # ======================
