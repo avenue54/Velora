@@ -82,7 +82,7 @@ def platform_ios_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="📥 Получить конфигурацию")],
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ Назад"), KeyboardButton(text="🏠 Главное меню")],
+            [KeyboardButton(text="⬅️ К выбору платформы"), KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
     )
@@ -94,7 +94,7 @@ def platform_android_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="📥 Получить конфигурацию")],
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ Назад"), KeyboardButton(text="🏠 Главное меню")],
+            [KeyboardButton(text="⬅️ К выбору платформы"), KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
     )
@@ -107,7 +107,7 @@ def platform_windows_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📥 Получить конфигурацию")],
             [KeyboardButton(text="🌍 Выбрать сервер")],
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ Назад"), KeyboardButton(text="🏠 Главное меню")],
+            [KeyboardButton(text="⬅️ К выбору платформы"), KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
     )
@@ -119,7 +119,7 @@ def platform_macos_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="📥 Получить конфигурацию")],
             [KeyboardButton(text="💬 Написать в поддержку")],
-            [KeyboardButton(text="⬅️ Назад"), KeyboardButton(text="🏠 Главное меню")],
+            [KeyboardButton(text="⬅️ К выбору платформы"), KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
     )

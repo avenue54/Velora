@@ -721,6 +721,14 @@ async def devices(message: Message):
     )
 
 
+@router.message(F.text == "⬅️ К выбору платформы")
+async def back_to_guide(message: Message):
+    await message.answer(
+        GUIDE_TEXT,
+        reply_markup=guide_keyboard()
+    )
+
+
 # ======================
 # НАВИГАЦИЯ
 # ======================
