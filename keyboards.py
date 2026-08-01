@@ -162,68 +162,46 @@ def back_keyboard() -> ReplyKeyboardMarkup:
 
 
 def plans_keyboard(plans):
-
-    keyboard = []
-
+    row = []
     added = set()
 
-
     for plan in plans:
-
         name = plan[1]
+        if name in added:
+            continue
+        text = (
+            "🟢 Start"
+            if name == "Start"
+            else "🔵 Plus ⭐"
+            if name == "Plus"
+            else "🟣 Pro"
+        )
+        row.append(KeyboardButton(text=text))
+        added.add(name)
 
-
-        if name not in added:
-
-            keyboard.append(
-                [
-                    KeyboardButton(
-                        text=(
-                            "🟢 Start"
-                            if name == "Start"
-                            else
-                            "🔵 Plus ⭐"
-                            if name == "Plus"
-                            else
-                            "🟣 Pro"
-                        )
-                    )
-                ]
-            )
-
-            added.add(name)
-
-
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard,
-        resize_keyboard=True
-    )
+    keyboard = [row] if row else []
+    keyboard.append([KeyboardButton(text="🏠 Главное меню")])
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 def period_keyboard(plans):
-
+    # Первый ряд: сроки в одну линию
+    period_row = [
+        KeyboardButton(text=f"{plan[4]} — {plan[5]}")
+        for plan in plans
+    ]
+    # Второй ряд: назад + главное меню
+    nav_row = [
+        KeyboardButton(text="⬅️ Назад"),
+        KeyboardButton(text="🏠 Главное меню"),
+    ]
     keyboard = []
+    if period_row:
+        keyboard.append(period_row)
+    keyboard.append(nav_row)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
-    for plan in plans:
-        keyboard.append(
-            [
-                KeyboardButton(
-                    text=f"{plan[4]} — {plan[5]}"
-                )
-            ]
-        )
 
-    keyboard.append(
-        [
-            KeyboardButton(text="⬅️ Назад")
-        ]
-    )
 
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard,
-        resize_keyboard=True
-    )
-    
-    
 def support_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -325,21 +303,14 @@ def profile_keyboard() -> ReplyKeyboardMarkup:
     return keyboard
 
 
-def payment_pay_keyboard() -> InlineKeyboardMarkup:
-    """Кнопка «Оплатить» — под сообщением заказа."""
-    builder = InlineKeyboardBuilder()
-    builder.button(text="💳 Оплатить", callback_data="payment:pay")
-    builder.adjust(1)
-    return builder.as_markup()
-
-
 def payment_keyboard() -> ReplyKeyboardMarkup:
-    """Кнопки внизу чата: проверить, изменить тариф, меню."""
-    return ReplyKeyboardMarkup(
+    keyboard = ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="💳 Оплатить")],
             [KeyboardButton(text="🔄 Проверить оплату")],
             [KeyboardButton(text="⬅️ Изменить тариф")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True,
+        resize_keyboard=True
     )
+    return keyboard
