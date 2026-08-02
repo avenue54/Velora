@@ -308,6 +308,27 @@ def payment_pay_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def documents_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔒 Политика конфиденциальности")],
+            [KeyboardButton(text="📜 Пользовательское соглашение")],
+            [KeyboardButton(text="💰 Цены и тарифы")],
+            [KeyboardButton(text="💬 Контакты поддержки")],
+            [KeyboardButton(text="🏠 Главное меню")],
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
+
+
+def document_link_keyboard(url: str, button_text: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=button_text, url=url)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def payment_keyboard() -> ReplyKeyboardMarkup:
     """Кнопки внизу: проверить оплату, изменить тариф, меню."""
     return ReplyKeyboardMarkup(
