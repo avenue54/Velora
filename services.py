@@ -28,17 +28,29 @@ def subscription_status_text(status: str) -> str:
 
 def create_order(telegram_id: int, plan: str, period: str, amount: str):
     """
-    Создать заказ (платёж pending).
-    Подписка здесь НЕ создаётся.
+    Создать заказ: платёж (pending) + заявку на подписку (pending).
+
+    Пока автоматическая оплата через Platega не подключена, заявка
+    на подписку создаётся сразу, чтобы админ увидел её в разделе
+    "💳 Подписки" и мог подтвердить вручную после получения оплаты.
     Возвращает payment_id или None.
     """
-    return create_payment(
+    payment_id = create_payment(
         telegram_id=telegram_id,
         plan=plan,
         period=period,
         amount=amount,
         provider="platega",
     )
+
+    create_subscription(
+        telegram_id=telegram_id,
+        plan=plan,
+        period=period,
+        price=amount,
+    )
+
+    return payment_id
 
 
 def get_order_screen_text(plan: str, period: str, amount: str, status: str = "pending") -> str:
