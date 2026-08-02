@@ -23,6 +23,8 @@ from admin_texts import (
 )
 from config import ADMIN_ID
 from states import BroadcastState
+from api import create_vpn_subscription, VeloraAPIError
+from database import get_connection
 
 router = Router()
 
@@ -204,25 +206,72 @@ async def activate_subscription_handler(callback: CallbackQuery):
 
     activate_subscription(subscription_id)
 
+    plan, period = "", ""
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT plan, period FROM subscriptions WHERE id = ?",
+            (subscription_id,),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            plan, period = row[0] or "", row[1] or ""
+    except Exception as e:
+        print(f"Load plan fail: {e}")
+
     user_tg_id = get_subscription_user_telegram_id(subscription_id)
+    vpn_url = None
+    vpn_error = None
+
     if user_tg_id:
         try:
-            await callback.bot.send_message(
-                chat_id=user_tg_id,
-                text=(
-                    "✅ <b>Подписка активирована!</b>\n\n"
-                    f"Заявка #{subscription_id} подтверждена.\n"
-                    "Доступ к VELORA открыт.\n\n"
-                    "Перейдите в «👤 Мой аккаунт», чтобы посмотреть детали,\n"
-                    "или в «📖 Инструкция» для подключения."
-                ),
+            data = await create_vpn_subscription(
+                telegram_id=user_tg_id,
+                plan=plan,
+                period=period,
             )
+            vpn_url = data.get("url")
+        except VeloraAPIError as e:
+            vpn_error = str(e)
+            print(f"VPN API error: {e} body={getattr(e, 'body', None)}")
+        except Exception as e:
+            vpn_error = str(e)
+            print(f"VPN provision fail: {e}")
+
+        try:
+            if vpn_url:
+                await callback.bot.send_message(
+                    chat_id=user_tg_id,
+                    text=(
+                        "✅ <b>Подписка активирована!</b>\n\n"
+                        f"Заявка #{subscription_id} подтверждена.\n"
+                        "Доступ к VELORA открыт.\n\n"
+                        "📥 <b>Ваша конфигурация WireGuard:</b>\n"
+                        f"<code>{vpn_url}</code>\n\n"
+                        "Откройте ссылку или импортируйте в WireGuard "
+                        "(Add tunnel → from URL / file).\n\n"
+                        "Инструкция: «📖 Инструкция» в меню бота."
+                    ),
+                )
+            else:
+                await callback.bot.send_message(
+                    chat_id=user_tg_id,
+                    text=(
+                        "✅ <b>Подписка активирована!</b>\n\n"
+                        f"Заявка #{subscription_id} подтверждена.\n"
+                        "Доступ открыт, но ссылка на конфиг временно недоступна.\n"
+                        "Напишите в поддержку — выдадим вручную."
+                    ),
+                )
         except Exception as e:
             print(f"Notify activate fail: {e}")
 
     await callback.message.delete()
+    extra = f"\n🔗 {vpn_url}" if vpn_url else (f"\n⚠️ VPN: {vpn_error}" if vpn_error else "")
     await callback.message.answer(
-        f"✅ Подписка #{subscription_id} активирована"
+        f"✅ Подписка #{subscription_id} активирована{extra}"
     )
     await callback.answer()
 

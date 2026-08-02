@@ -24,32 +24,10 @@ def main_menu_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="👤 Мой аккаунт"), KeyboardButton(text="💳 Тарифы")],
             [KeyboardButton(text="🌍 Серверы"), KeyboardButton(text="📖 Инструкция")],
             [KeyboardButton(text="💬 Поддержка"), KeyboardButton(text="🛡️ О VPN")],
-            [KeyboardButton(text="📄 Документы")],
         ],
-        resize_keyboard=True,
+        resize_keyboard=True
     )
     return keyboard
-
-
-def documents_keyboard() -> ReplyKeyboardMarkup:
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🔒 Политика конфиденциальности")],
-            [KeyboardButton(text="📜 Пользовательское соглашение")],
-            [KeyboardButton(text="💰 Цены и тарифы")],
-            [KeyboardButton(text="💬 Контакты поддержки")],
-            [KeyboardButton(text="🏠 Главное меню")],
-        ],
-        resize_keyboard=True,
-    )
-    return keyboard
-
-
-def document_link_keyboard(url: str, label: str = "📄 Открыть документ") -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text=label, url=url)
-    builder.adjust(1)
-    return builder.as_markup()
 
 def tariffs_reply_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
@@ -251,9 +229,10 @@ def about_vpn_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🛡️ Конфиденциальность")],
             [KeyboardButton(text="⚡ Производительность")],
             [KeyboardButton(text="🌍 Серверы VELORA")],
+            [KeyboardButton(text="📄 Документы")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
     return keyboard
 

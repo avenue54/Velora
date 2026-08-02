@@ -86,6 +86,7 @@ from services import (
     payment_pay_stub_text,
     payment_check_stub_text,
 )
+from api import create_vpn_subscription, VeloraAPIError
 
 router = Router()
 
@@ -263,10 +264,46 @@ async def guide_macos(message: Message):
 
 @router.message(F.text == "📥 Получить конфигурацию")
 async def get_config(message: Message):
-    await message.answer(
-        GET_CONFIG_TEXT,
-        reply_markup=get_config_keyboard()
-    )
+    profile = get_profile(message.from_user.id)
+    has_active = bool(profile and profile[3] and profile[6] == "active")
+
+    if not has_active:
+        await message.answer(
+            GET_CONFIG_TEXT,
+            reply_markup=get_config_keyboard(),
+        )
+        return
+
+    plan = profile[3] or ""
+    period = profile[4] or ""
+    try:
+        data = await create_vpn_subscription(
+            telegram_id=message.from_user.id,
+            plan=plan,
+            period=period,
+        )
+        url = data["url"]
+        await message.answer(
+            "📥 <b>Ваша конфигурация VELORA</b>\n\n"
+            f"Ссылка на WireGuard-конфиг:\n<code>{url}</code>\n\n"
+            "Импорт: откройте ссылку или в WireGuard → "
+            "Add tunnel → from file/URL.\n\n"
+            "Не пересылайте ссылку третьим лицам.",
+            reply_markup=get_config_keyboard(),
+        )
+    except VeloraAPIError as e:
+        print(f"get_config API error: {e} {getattr(e, 'body', None)}")
+        await message.answer(
+            "⚠️ Не удалось получить конфиг автоматически.\n"
+            "Напишите в поддержку — выдадим вручную.",
+            reply_markup=get_config_keyboard(),
+        )
+    except Exception as e:
+        print(f"get_config fail: {e}")
+        await message.answer(
+            "⚠️ Ошибка при выдаче конфигурации. Попробуйте позже.",
+            reply_markup=get_config_keyboard(),
+        )
 
 
 @router.message(F.text == "💬 Поддержка по настройке")
