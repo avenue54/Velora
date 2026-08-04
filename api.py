@@ -20,7 +20,7 @@ class VeloraAPIError(Exception):
 
 
 async def create_vpn_subscription(telegram_id: int, plan: str = "", period: str = ""):
-    """Создаёт подписку + WireGuard конфиг через API"""
+    """Создаёт подписку + токен + WireGuard конфиг (новый API)"""
     url = f"{API_URL}/internal/create-sub"
     
     payload = {
@@ -41,9 +41,8 @@ async def create_vpn_subscription(telegram_id: int, plan: str = "", period: str 
 
                 data = await response.json()
                 
-                token = data.get("token") or data.get("subscription_token")
                 sub_url = data.get("url") or data.get("subscription_url")
-
+                
                 if not sub_url:
                     raise VeloraAPIError("API не вернул URL конфига")
 
