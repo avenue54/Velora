@@ -19,56 +19,39 @@ class VeloraAPIError(Exception):
         self.body = body
 
 
-async def create_vpn_subscription(
-    telegram_id: int,
-    plan: str = "",
-    period: str = "",
-) -> dict:
-    if not API_KEY:
-        raise VeloraAPIError("VELORA_API_KEY не задан в .env")
-
+async def create_vpn_subscription(telegram_id: int, plan: str = "", period: str = ""):
+    """Создаёт подписку + WireGuard конфиг через API"""
+    url = f"{API_URL}/internal/create-sub"
+    
     payload = {
         "telegram_id": int(telegram_id),
-        "plan": plan or None,
-        "period": period or None,
+        "plan": plan or "Plus",
+        "period": period or "1 месяц",
     }
-    headers = {
-        "X-API-Key": API_KEY,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    url = f"{API_URL}/internal/create-sub"
-    timeout = aiohttp.ClientTimeout(total=30)
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, json=payload, headers=headers) as response:
-            text = await response.text()
-            try:
-                data = await response.json(content_type=None)
-            except Exception:
-                data = {"raw": text}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers={
+                "X-API-Key": API_KEY,
+                "Content-Type": "application/json"
+            }, json=payload) as response:
+                
+                if response.status != 200:
+                    raise VeloraAPIError(f"API error {response.status}")
 
-            if response.status >= 400:
-                logger.error("API error %s: %s", response.status, data)
-                raise VeloraAPIError(
-                    f"API error {response.status}",
-                    status=response.status,
-                    body=data,
-                )
+                data = await response.json()
+                
+                token = data.get("token") or data.get("subscription_token")
+                sub_url = data.get("url") or data.get("subscription_url")
 
-            token = data.get("token") or data.get("subscription_token")
-            sub_url = (
-                data.get("url")
-                or data.get("subscription_url")
-                or (f"{API_URL}/sub/{token}" if token else None)
-            )
-            if not sub_url:
-                raise VeloraAPIError("API не вернул url/token", body=data)
+                if not sub_url:
+                    raise VeloraAPIError("API не вернул URL конфига")
 
-            data["url"] = sub_url
-            if token:
-                data["token"] = token
-            return data
+                return {"url": sub_url}
+
+    except Exception as e:
+        logger.error(f"VeloraAPIError: {e}")
+        raise VeloraAPIError(str(e))
 
 
 async def create_subscription(telegram_id: int, plan: str = "", period: str = "") -> str:
