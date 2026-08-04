@@ -1,7 +1,10 @@
 from aiogram import Router, F
 from datetime import datetime
 from aiogram.filters import CommandStart
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.enums import ChatMemberStatus
+from aiogram.fsm.context import FSMContext
+
 from keyboards import (
     main_menu_reply_keyboard,
     tariffs_reply_keyboard,
@@ -75,10 +78,7 @@ from database import (
     get_user_subscription,
     get_profile
 )
-
-from aiogram.fsm.context import FSMContext
 from states import SubscriptionState, RenewalState, ChangeTariffState
-
 from services import (
     subscription_status_text,
     create_order,
@@ -87,8 +87,25 @@ from services import (
     payment_check_stub_text,
 )
 from api import create_vpn_subscription, VeloraAPIError
+from config import CHANNEL_USERNAME, CHANNEL_LINK
 
 router = Router()
+
+
+# ======================
+# ПРОВЕРКА ПОДПИСКИ НА КАНАЛ
+# ======================
+
+async def is_user_subscribed(bot, user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
+        return member.status in {
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.CREATOR,
+        }
+    except Exception:
+        return False
 
 
 # ======================
@@ -97,23 +114,55 @@ router = Router()
 
 @router.message(CommandStart())
 async def start(message: Message):
-
-    print("START НАЖАТ")
-
     add_user(
         telegram_id=message.from_user.id,
         username=message.from_user.username,
         first_name=message.from_user.first_name
     )
 
-    print("БАЗА ОК")
+    # Проверка подписки на канал
+    if not await is_user_subscribed(message.bot, message.from_user.id):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Подписаться на канал", url=CHANNEL_LINK)],
+            [InlineKeyboardButton(text="✅ Я подписался — проверить", callback_data="check_sub")],
+        ])
+        await message.answer(
+            "👋 Добро пожаловать в <b>VELORA</b>!\n\n"
+            "Для доступа к боту нужно подписаться на наш канал новостей:\n"
+            f"{CHANNEL_LINK}\n\n"
+            "После подписки нажмите кнопку ниже.",
+            reply_markup=kb
+        )
+        return
 
-    print("ОТПРАВЛЯЮ СООБЩЕНИЕ")
-
+    # Если уже подписан
     await message.answer(
         WELCOME_TEXT,
         reply_markup=main_menu_reply_keyboard()
     )
+
+
+@router.callback_query(F.data == "check_sub")
+async def check_subscription(callback: CallbackQuery):
+    subscribed = await is_user_subscribed(callback.bot, callback.from_user.id)
+
+    if subscribed:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+
+        await callback.message.answer(
+            WELCOME_TEXT,
+            reply_markup=main_menu_reply_keyboard()
+        )
+        await callback.answer("✅ Подписка подтверждена!")
+    else:
+        await callback.answer(
+            "❌ Вы ещё не подписались на канал.\nПодпишитесь и нажмите кнопку снова.",
+            show_alert=True
+        )
+
 
 # ======================
 # ГЛАВНОЕ МЕНЮ
@@ -142,18 +191,13 @@ async def my_profile(message: Message):
         message.from_user.id
     )
 
-
     if not profile:
-
         await message.answer(
             "👤 Профиль VELORA\n\n"
             "❌ Данные не найдены",
             reply_markup=profile_keyboard()
         )
-
         return
-
-
 
     (
         telegram_id,
@@ -167,8 +211,6 @@ async def my_profile(message: Message):
         end_date,
         devices_used
     ) = profile
-
-
 
     days_left = ""
     expiry_str = ""
@@ -214,6 +256,7 @@ async def my_profile(message: Message):
         "🚀 VELORA — безопасное подключение",
         reply_markup=profile_keyboard()
     )
+
 
 @router.message(F.text == "🌍 Серверы")
 async def servers(message: Message):
@@ -285,9 +328,9 @@ async def get_config(message: Message):
         url = data["url"]
         await message.answer(
             "📥 <b>Ваша конфигурация VELORA</b>\n\n"
-            f"Ссылка на WireGuard-конфиг:\n<code>{url}</code>\n\n"
-            "Импорт: откройте ссылку или в WireGuard → "
-            "Add tunnel → from file/URL.\n\n"
+            f"Ссылка на конфиг:\n<code>{url}</code>\n\n"
+            "Импорт: откройте ссылку в клиенте "
+            "(Hiddify / v2rayNG / Streisand и т.д.).\n\n"
             "Не пересылайте ссылку третьим лицам.",
             reply_markup=get_config_keyboard(),
         )
@@ -321,6 +364,7 @@ async def support(message: Message):
         reply_markup=support_keyboard()
     )
 
+
 @router.message(F.text == "💬 Написать в поддержку")
 async def contact_support(message: Message):
     await message.answer(
@@ -336,12 +380,14 @@ async def about_vpn(message: Message):
         reply_markup=about_vpn_keyboard()
     )
 
+
 @router.message(F.text == "🚀 О VELORA")
 async def about_velora(message: Message):
     await message.answer(
         ABOUT_VELORA_TEXT,
         reply_markup=about_vpn_keyboard()
     )
+
 
 @router.message(F.text == "❓ Что такое VPN")
 async def what_is_vpn(message: Message):
@@ -350,12 +396,14 @@ async def what_is_vpn(message: Message):
         reply_markup=about_vpn_keyboard()
     )
 
+
 @router.message(F.text == "🔐 Как работает защита")
 async def how_vpn_works(message: Message):
     await message.answer(
         HOW_VPN_WORKS_TEXT,
         reply_markup=about_vpn_keyboard()
     )
+
 
 @router.message(F.text == "🛡️ Конфиденциальность")
 async def privacy(message: Message):
@@ -364,12 +412,14 @@ async def privacy(message: Message):
         reply_markup=about_vpn_keyboard()
     )
 
+
 @router.message(F.text == "⚡ Производительность")
 async def performance(message: Message):
     await message.answer(
         PERFORMANCE_TEXT,
         reply_markup=about_vpn_keyboard()
     )
+
 
 @router.message(F.text == "🌍 Серверы VELORA")
 async def servers_info(message: Message):
@@ -443,10 +493,7 @@ async def support_contacts(message: Message):
 
 @router.message(F.text == "💳 Тарифы")
 async def tariffs(message: Message):
-
     plans = get_plans()
-
-
     await message.answer(
         "💳 Тарифы VELORA\n\n"
         "Выберите тариф:",
@@ -455,24 +502,10 @@ async def tariffs(message: Message):
 
 
 @router.message(F.text == "🟢 Start")
-async def start_tariff(
-    message: Message,
-    state: FSMContext
-):
-
-    await state.update_data(
-        plan="Start"
-    )
-
-
-    await state.set_state(
-        SubscriptionState.choosing_period
-    )
-
-
+async def start_tariff(message: Message, state: FSMContext):
+    await state.update_data(plan="Start")
+    await state.set_state(SubscriptionState.choosing_period)
     plans = get_plans_by_name("Start")
-
-
     await message.answer(
         START_TEXT,
         reply_markup=period_keyboard(plans)
@@ -480,24 +513,10 @@ async def start_tariff(
 
 
 @router.message(F.text == "🔵 Plus ⭐")
-async def plus_tariff(
-    message: Message,
-    state: FSMContext
-):
-
-    await state.update_data(
-        plan="Plus"
-    )
-
-
-    await state.set_state(
-        SubscriptionState.choosing_period
-    )
-
-
+async def plus_tariff(message: Message, state: FSMContext):
+    await state.update_data(plan="Plus")
+    await state.set_state(SubscriptionState.choosing_period)
     plans = get_plans_by_name("Plus")
-
-
     await message.answer(
         PLUS_TEXT,
         reply_markup=period_keyboard(plans)
@@ -505,24 +524,10 @@ async def plus_tariff(
 
 
 @router.message(F.text == "🟣 Pro")
-async def pro_tariff(
-    message: Message,
-    state: FSMContext
-):
-
-    await state.update_data(
-        plan="Pro"
-    )
-
-
-    await state.set_state(
-        SubscriptionState.choosing_period
-    )
-
-
+async def pro_tariff(message: Message, state: FSMContext):
+    await state.update_data(plan="Pro")
+    await state.set_state(SubscriptionState.choosing_period)
     plans = get_plans_by_name("Pro")
-
-
     await message.answer(
         PRO_TEXT,
         reply_markup=period_keyboard(plans)
@@ -534,11 +539,7 @@ async def pro_tariff(
 # ======================
 
 @router.message(SubscriptionState.choosing_period, F.text.contains("месяц"))
-async def buy_tariff(
-    message: Message,
-    state: FSMContext
-):
-
+async def buy_tariff(message: Message, state: FSMContext):
     data = await state.get_data()
     plan_name = data.get("plan")
 
@@ -563,7 +564,6 @@ async def buy_tariff(
         )
         return
 
-    # Не создаём подписку — только платёж (заказ)
     payment_id = create_order(
         telegram_id=message.from_user.id,
         plan=plan[1],
@@ -797,7 +797,6 @@ async def back_to_guide(message: Message):
         GUIDE_TEXT,
         reply_markup=guide_keyboard()
     )
-
 
 
 # ======================
