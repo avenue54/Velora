@@ -20,5 +20,6 @@ API_KEY = os.getenv("VELORA_API_KEY", "")
 PLATEGA_MERCHANT_ID = os.getenv("PLATEGA_MERCHANT_ID", "")
 PLATEGA_SECRET = os.getenv("PLATEGA_SECRET", "")
 PLATEGA_API_URL = os.getenv("PLATEGA_API_URL", "https://app.platega.io").rstrip("/")
-PLATEGA_PAYMENT_METHOD = int(os.getenv("PLATEGA_PAYMENT_METHOD", "2"))
+_pm = os.getenv("PLATEGA_PAYMENT_METHOD", "").strip()
+PLATEGA_PAYMENT_METHOD = int(_pm) if _pm.isdigit() and int(_pm) in (2, 11, 12, 13) else None
 

@@ -81,6 +81,7 @@ async def create_payment_link(
     if payment_method in (2, 11, 12, 13):
         body["paymentMethod"] = payment_method
 
+    logger.info("Platega create body keys=%s paymentMethod=%s", list(body.keys()), body.get("paymentMethod"))
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=body, headers=headers, timeout=20) as resp:
@@ -128,6 +129,7 @@ async def get_transaction_status(transaction_id: str) -> dict:
         "X-MerchantId": PLATEGA_MERCHANT_ID,
         "X-Secret": PLATEGA_SECRET,
     }
+    logger.info("Platega create body keys=%s paymentMethod=%s", list(body.keys()), body.get("paymentMethod"))
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, timeout=15) as resp:
