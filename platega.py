@@ -40,7 +40,7 @@ async def create_payment_link(
     amount_rub: float,
     description: str,
     payload: str,
-    payment_method: int = 2,
+    payment_method: Optional[int] = None,
     return_url: str = "https://t.me/Velora_news",
     failed_url: str = "https://t.me/Velora_news",
 ) -> dict:
@@ -48,6 +48,7 @@ async def create_payment_link(
     Создаёт транзакцию в Platega.
 
     payment_method:
+      None — общая платёжная форма (СБП / карта / крипта — что включено у мерчанта)
       2  — СБП QR
       11 — Карты
       12 — Международный эквайринг
@@ -66,7 +67,6 @@ async def create_payment_link(
         "X-Secret": PLATEGA_SECRET,
     }
     body = {
-        "paymentMethod": payment_method,
         "paymentDetails": {
             "amount": amount_rub,
             "currency": "RUB",
@@ -76,6 +76,9 @@ async def create_payment_link(
         "failedUrl": failed_url,
         "payload": payload,
     }
+    # Без paymentMethod → общая форма с выбором способа оплаты
+    if payment_method is not None:
+        body["paymentMethod"] = payment_method
 
     try:
         async with aiohttp.ClientSession() as session:

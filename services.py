@@ -24,7 +24,6 @@ from platega import (
     get_transaction_status,
     normalize_webhook_status,
 )
-from config import PLATEGA_PAYMENT_METHOD
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +97,7 @@ async def start_platega_payment(
         amount_rub=amount,
         description=f"VELORA {plan} ({period})",
         payload=payload,
-        payment_method=PLATEGA_PAYMENT_METHOD,
+        # payment_method=None → общая форма Platega (СБП / карта / крипта)
     )
 
     # Сохраняем transactionId от Platega
