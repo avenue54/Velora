@@ -3,6 +3,9 @@ platega.py — клиент Platega API + разбор webhook.
 
 Документация: https://docs.platega.io
 Base: https://app.platega.io
+
+Общая форма (выбор СБП/карта/крипта):  POST /v2/transaction/process
+Конкретный метод:                      POST /transaction/process + paymentMethod
 """
 
 from __future__ import annotations
@@ -43,30 +46,31 @@ async def create_payment_link(
     payment_method: Optional[int] = None,
     return_url: str = "https://t.me/Velora_news",
     failed_url: str = "https://t.me/Velora_news",
+    telegram_id: Optional[int] = None,
+    username: Optional[str] = None,
 ) -> dict:
     """
     Создаёт транзакцию в Platega.
 
     payment_method:
-      None — общая платёжная форма (СБП / карта / крипта — что включено у мерчанта)
+      None — общая форма (v2), пользователь сам выбирает способ
       2  — СБП QR
       11 — Карты
       12 — Международный эквайринг
       13 — Крипта
 
-    Возвращает dict с ключами:
-      transaction_id, redirect, status, raw
+    Возвращает: transaction_id, redirect, status, raw
     """
     if not PLATEGA_MERCHANT_ID or not PLATEGA_SECRET:
         raise PlategaError("PLATEGA_MERCHANT_ID / PLATEGA_SECRET не заданы в .env")
 
-    url = f"{PLATEGA_API_URL.rstrip('/')}/transaction/process"
     headers = {
         "Content-Type": "application/json",
         "X-MerchantId": PLATEGA_MERCHANT_ID,
         "X-Secret": PLATEGA_SECRET,
     }
-    body = {
+
+    body: dict[str, Any] = {
         "paymentDetails": {
             "amount": amount_rub,
             "currency": "RUB",
@@ -76,12 +80,31 @@ async def create_payment_link(
         "failedUrl": failed_url,
         "payload": payload,
     }
-    # Без paymentMethod → общая форма (СБП / карта / крипта)
-    # 0 и прочий мусор не отправляем — Platega ругается VAL_0001
+
+    # metadata рекомендуется для антифрода
+    meta: dict[str, str] = {}
+    if telegram_id is not None:
+        meta["userId"] = str(telegram_id)
+    if username:
+        meta["userName"] = username if username.startswith("@") else f"@{username}"
+    if meta:
+        body["metadata"] = meta
+
+    # Конкретный метод → старый endpoint
+    # Без метода → v2 (общая форма)
     if payment_method in (2, 11, 12, 13):
         body["paymentMethod"] = payment_method
+        url = f"{PLATEGA_API_URL.rstrip('/')}/transaction/process"
+    else:
+        url = f"{PLATEGA_API_URL.rstrip('/')}/v2/transaction/process"
 
-    logger.info("Platega create body keys=%s paymentMethod=%s", list(body.keys()), body.get("paymentMethod"))
+    logger.info(
+        "Platega create url=%s keys=%s paymentMethod=%s",
+        url,
+        list(body.keys()),
+        body.get("paymentMethod"),
+    )
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=body, headers=headers, timeout=20) as resp:
@@ -96,13 +119,18 @@ async def create_payment_link(
                 try:
                     data = await resp.json(content_type=None)
                 except Exception:
-                    raise PlategaError("Platega вернула не-JSON", status=resp.status, body=text)
+                    raise PlategaError(
+                        "Platega вернула не-JSON",
+                        status=resp.status,
+                        body=text,
+                    )
 
                 transaction_id = data.get("transactionId") or data.get("id")
-                redirect = data.get("redirect")
+                # v2 отдаёт "url", v1 — "redirect"
+                redirect = data.get("redirect") or data.get("url")
                 if not transaction_id or not redirect:
                     raise PlategaError(
-                        "Platega не вернула transactionId/redirect",
+                        "Platega не вернула transactionId/redirect|url",
                         status=resp.status,
                         body=data,
                     )
@@ -129,7 +157,6 @@ async def get_transaction_status(transaction_id: str) -> dict:
         "X-MerchantId": PLATEGA_MERCHANT_ID,
         "X-Secret": PLATEGA_SECRET,
     }
-    logger.info("Platega create body keys=%s paymentMethod=%s", list(body.keys()), body.get("paymentMethod"))
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, timeout=15) as resp:
@@ -161,8 +188,7 @@ def verify_webhook_headers(merchant_id: Optional[str], secret: Optional[str]) ->
 
 def normalize_webhook_status(raw_status: Any) -> str:
     """
-    Приводит статус webhook к внутреннему:
-      confirmed | canceled | chargeback | pending | unknown
+    confirmed | canceled | chargeback | pending | unknown
     """
     if raw_status is None:
         return "unknown"
@@ -177,16 +203,9 @@ def normalize_webhook_status(raw_status: Any) -> str:
         "CHARGEBACK": "chargeback",
         "CHARGEBACKED": "chargeback",
         "PENDING": "pending",
-    }
-    # числовые статусы из доки: 7=CONFIRMED, 6=CANCELED, 9=CHARGEBACKED, 1=PENDING
-    numeric = {
         "7": "confirmed",
         "6": "canceled",
         "9": "chargeback",
         "1": "pending",
     }
-    if s in mapping:
-        return mapping[s]
-    if s in numeric:
-        return numeric[s]
-    return "unknown"
+    return mapping.get(s, "unknown")
