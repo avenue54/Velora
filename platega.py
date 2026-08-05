@@ -76,8 +76,9 @@ async def create_payment_link(
         "failedUrl": failed_url,
         "payload": payload,
     }
-    # Без paymentMethod → общая форма с выбором способа оплаты
-    if payment_method is not None:
+    # Без paymentMethod → общая форма (СБП / карта / крипта)
+    # 0 и прочий мусор не отправляем — Platega ругается VAL_0001
+    if payment_method in (2, 11, 12, 13):
         body["paymentMethod"] = payment_method
 
     try:
