@@ -340,6 +340,26 @@ def get_plan_by_period(plan_name, period):
 # ПОДПИСКИ
 # =========================
 
+
+def get_device_limit(plan_name: str) -> int:
+    """Лимит устройств по имени тарифа из plans, иначе дефолт."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT devices FROM plans
+        WHERE name = ? AND active = 1
+        ORDER BY id LIMIT 1
+        """,
+        (plan_name,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row and row[0]:
+        return int(row[0])
+    defaults = {"Start": 2, "Plus": 5, "Pro": 10}
+    return defaults.get(plan_name, 1)
+
 def create_subscription(telegram_id, plan, period, price):
     user_id = get_user_id(telegram_id)
     if not user_id:

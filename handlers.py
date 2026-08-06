@@ -89,6 +89,7 @@ from database import (
     list_device_slots,
     add_device_slot,
     remove_device_slot,
+    get_device_limit,
     get_referral_reward_by_payment,
     extend_active_subscription_days,
 )
@@ -795,52 +796,86 @@ async def change_tariff_period_chosen(message: Message, state: FSMContext):
 # ======================
 # УСТРОЙСТВА
 # ======================
+# УСТРОЙСТВА (слоты по тарифу)
+# ======================
+
+def _devices_text(telegram_id: int) -> tuple[str, bool]:
+    """Текст экрана устройств. Returns (text, has_active_sub)."""
+    profile = get_profile(telegram_id)
+    if not profile or not profile[3]:
+        nl = chr(10)
+        return (
+            "⚙️ <b>Устройства</b>" + nl + nl
+            + "❌ Нет активной подписки." + nl
+            + "Оформите тариф, чтобы добавлять устройства.",
+            False,
+        )
+    plan = profile[3]
+    limit = get_device_limit(plan)
+    slots = list_device_slots(telegram_id)
+    used = len(slots)
+    nl = chr(10)
+    parts = [
+        "⚙️ <b>Устройства</b>",
+        f"Тариф: <b>{plan}</b>",
+        f"Слотов: <b>{used} / {limit}</b>",
+        "",
+    ]
+    if slots:
+        parts.append("Список:")
+        for sid, label, created in slots:
+            created_short = (created or "")[:16]
+            parts.append(f"• {label}  <i>#{sid}</i>  <code>{created_short}</code>")
+    else:
+        parts.append("Пока пусто — добавьте телефон, ПК и т.д.")
+    parts += [
+        "",
+        "Учёт устройств по тарифу. Один конфиг можно поставить "
+        "на несколько устройств в пределах лимита.",
+    ]
+    return nl.join(parts), True
+
 
 @router.message(F.text == "⚙️ Устройства")
 async def devices(message: Message):
-    profile = get_profile(message.from_user.id)
-
-    if not profile or not profile[3]:
-        await message.answer(
-            "⚙️ Устройства\n\n"
-            "❌ У вас нет активной подписки.\n\n"
-            "Для подключения устройств необходимо оформить подписку.",
-            reply_markup=profile_keyboard()
-        )
+    text, has_sub = _devices_text(message.from_user.id)
+    if not has_sub:
+        await message.answer(text, reply_markup=profile_keyboard())
         return
-
-    plan = profile[3]
-    max_devices = {"Start": 2, "Plus": 5, "Pro": 10}
-    limit = max_devices.get(plan, 0)
-    slots = list_device_slots(message.from_user.id)
-    used = len(slots)
-
-    lines_out = [f"⚙️ <b>Устройства</b> · тариф <b>{plan}</b>\n"]
-    lines_out.append(f"Слотов: <b>{used} / {limit}</b>\n")
-    if slots:
-        lines_out.append("Ваши устройства:")
-        for sid, label, created in slots:
-            lines_out.append(f"• {label} <i>(#{sid})</i>")
-    else:
-        lines_out.append("Пока нет добавленных устройств.")
-    lines_out.append(
-        "\nУчёт слотов по тарифу. Один конфиг можно поставить "
-        "на несколько устройств в пределах лимита."
-    )
-    await message.answer(
-        "\n".join(lines_out),
-        reply_markup=devices_keyboard(),
-    )
+    await message.answer(text, reply_markup=devices_keyboard())
 
 
 @router.message(F.text == "➕ Добавить устройство")
 async def device_add(message: Message, state: FSMContext):
     profile = get_profile(message.from_user.id)
     if not profile or not profile[3]:
-        await message.answer("Нужна активная подписка.")
+        await message.answer("Нужна активная подписка.", reply_markup=profile_keyboard())
+        return
+    plan = profile[3]
+    limit = get_device_limit(plan)
+    used = len(list_device_slots(message.from_user.id))
+    if used >= limit:
+        nl = chr(10)
+        await message.answer(
+            f"❌ Лимит тарифа <b>{plan}</b>: {limit} устройств." + nl
+            + "Удалите слот или смените тариф.",
+            reply_markup=devices_keyboard(),
+        )
         return
     await state.set_state(DeviceState.waiting_label)
-    await message.answer("Как назвать устройство? (например: iPhone, Ноутбук)")
+    nl = chr(10)
+    await message.answer(
+        "Как назвать устройство?" + nl
+        + "Например: <code>iPhone</code>, <code>Ноутбук</code>, <code>ПК</code>" + nl + nl
+        + "Или /cancel — отмена."
+    )
+
+
+@router.message(DeviceState.waiting_label, F.text == "/cancel")
+async def device_add_cancel(message: Message, state: FSMContext):
+    await state.clear()
+    text, _ = _devices_text(message.from_user.id)
+    await message.answer("Отменено." + chr(10) + chr(10) + text, reply_markup=devices_keyboard())
 
 
 @router.message(DeviceState.waiting_label)
@@ -850,39 +885,63 @@ async def device_label_save(message: Message, state: FSMContext):
         await state.clear()
         return
     plan = profile[3]
-    max_devices = {"Start": 2, "Plus": 5, "Pro": 10}
-    limit = max_devices.get(plan, 0)
-    label = (message.text or "Устройство").strip()
+    limit = get_device_limit(plan)
+    label = (message.text or "Устройство").strip()[:40]
+    if not label:
+        await message.answer("Название не может быть пустым.")
+        return
     ok, err = add_device_slot(message.from_user.id, label, limit)
     await state.clear()
     if not ok:
         await message.answer(f"❌ {err}", reply_markup=devices_keyboard())
         return
-    await message.answer(f"✅ Добавлено: <b>{label}</b>", reply_markup=devices_keyboard())
+    text, _ = _devices_text(message.from_user.id)
+    await message.answer(
+        f"✅ Добавлено: <b>{label}</b>" + chr(10) + chr(10) + text,
+        reply_markup=devices_keyboard(),
+    )
 
 
 @router.message(F.text == "🗑 Удалить устройство")
 async def device_del_hint(message: Message):
     slots = list_device_slots(message.from_user.id)
     if not slots:
-        await message.answer("Нечего удалять.")
+        await message.answer("Нечего удалять.", reply_markup=devices_keyboard())
         return
     rows = [
         [InlineKeyboardButton(text=f"🗑 {label}", callback_data=f"devdel:{sid}")]
         for sid, label, _ in slots
     ]
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="devdel:cancel")])
     await message.answer(
-        "Выберите устройство для удаления:",
+        "Какое устройство удалить?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
 
+@router.callback_query(F.data == "devdel:cancel")
+async def device_del_cancel(callback: CallbackQuery):
+    await callback.answer()
+    text, _ = _devices_text(callback.from_user.id)
+    try:
+        await callback.message.edit_text(text)
+    except Exception:
+        await callback.message.answer(text, reply_markup=devices_keyboard())
+
+
 @router.callback_query(F.data.startswith("devdel:"))
 async def device_del_cb(callback: CallbackQuery):
+    if callback.data == "devdel:cancel":
+        return
     sid = int(callback.data.split(":")[1])
     if remove_device_slot(sid, callback.from_user.id):
         await callback.answer("Удалено")
-        await callback.message.edit_text("✅ Устройство удалено")
+        text, _ = _devices_text(callback.from_user.id)
+        body = "✅ Удалено" + chr(10) + chr(10) + text
+        try:
+            await callback.message.edit_text(body)
+        except Exception:
+            await callback.message.answer(body, reply_markup=devices_keyboard())
     else:
         await callback.answer("Не найдено", show_alert=True)
 
