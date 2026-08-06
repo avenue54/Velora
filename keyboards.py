@@ -264,11 +264,22 @@ def change_tariff_keyboard(current_plan: str) -> ReplyKeyboardMarkup:
 def devices_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="➕ Добавить устройство"), KeyboardButton(text="🗑 Удалить устройство")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
     )
     return keyboard
+
+
+def referral_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🎟 Ввести промокод")],
+            [KeyboardButton(text="🏠 Главное меню")],
+        ],
+        resize_keyboard=True,
+    )
 
 
 def profile_keyboard() -> ReplyKeyboardMarkup:
@@ -284,9 +295,8 @@ def profile_keyboard() -> ReplyKeyboardMarkup:
                 )
             ],
             [
-                KeyboardButton(
-                    text="⚙️ Устройства"
-                )
+                KeyboardButton(text="⚙️ Устройства"),
+                KeyboardButton(text="🎁 Рефералка / промо"),
             ],
             [
                 KeyboardButton(
