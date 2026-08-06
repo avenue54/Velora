@@ -204,6 +204,11 @@ async def check_subscription(callback: CallbackQuery):
 
 @router.message(F.text == "🚀 Подключиться")
 async def connect(message: Message):
+    profile = get_profile(message.from_user.id)
+    has_active = bool(profile and profile[3] and profile[6] == "active")
+    if has_active:
+        await _issue_config_with_device(message)
+        return
     await message.answer(
         CONNECT_TEXT,
         reply_markup=connect_keyboard()
@@ -339,10 +344,11 @@ async def guide_macos(message: Message):
     )
 
 
-@router.message(F.text == "📥 Получить конфигурацию")
-async def get_config(message: Message):
+async def _issue_config_with_device(message: Message) -> None:
+    """Подключение: +1 слот устройства → выдача ссылки."""
     profile = get_profile(message.from_user.id)
     has_active = bool(profile and profile[3] and profile[6] == "active")
+    nl = chr(10)
 
     if not has_active:
         await message.answer(
@@ -353,6 +359,25 @@ async def get_config(message: Message):
 
     plan = profile[3] or ""
     period = profile[4] or ""
+    limit = get_device_limit(plan)
+    used = len(list_device_slots(message.from_user.id))
+
+    if used >= limit:
+        await message.answer(
+            f"❌ Лимит устройств тарифа <b>{plan}</b>: <b>{limit}</b>." + nl + nl
+            + "Освободите слот: Аккаунт → ⚙️ Устройства → удалить." + nl
+            + "Или смените тариф на больший.",
+            reply_markup=get_config_keyboard(),
+        )
+        return
+
+    slot_n = used + 1
+    label = f"Устройство {slot_n}"
+    ok, err = add_device_slot(message.from_user.id, label, limit)
+    if not ok:
+        await message.answer(f"❌ {err}", reply_markup=get_config_keyboard())
+        return
+
     try:
         data = await create_vpn_subscription(
             telegram_id=message.from_user.id,
@@ -361,26 +386,43 @@ async def get_config(message: Message):
         )
         url = data["url"]
         await message.answer(
-            "📥 <b>Ваша конфигурация VELORA</b>\n\n"
-            f"Ссылка на конфиг:\n<code>{url}</code>\n\n"
-            "Импорт: откройте ссылку в клиенте "
-            "(Hiddify / v2rayNG / Streisand и т.д.).\n\n"
-            "Не пересылайте ссылку третьим лицам.",
+            "✅ <b>Подключение</b>" + nl + nl
+            + f"📱 Слот: <b>{label}</b> ({slot_n}/{limit})" + nl + nl
+            + "📥 Ссылка на конфиг:" + nl
+            + f"<code>{url}</code>" + nl + nl
+            + "Импорт в Hiddify / v2rayNG / Streisand." + nl
+            + "Не пересылайте ссылку третьим лицам.",
             reply_markup=get_config_keyboard(),
         )
     except VeloraAPIError as e:
+        slots = list_device_slots(message.from_user.id)
+        if slots:
+            remove_device_slot(slots[-1][0], message.from_user.id)
         print(f"get_config API error: {e} {getattr(e, 'body', None)}")
         await message.answer(
-            "⚠️ Не удалось получить конфиг автоматически.\n"
-            "Напишите в поддержку — выдадим вручную.",
+            "⚠️ Не удалось получить конфиг. Слот не занят." + nl
+            + "Попробуйте ещё раз или напишите в поддержку.",
             reply_markup=get_config_keyboard(),
         )
     except Exception as e:
+        slots = list_device_slots(message.from_user.id)
+        if slots:
+            remove_device_slot(slots[-1][0], message.from_user.id)
         print(f"get_config fail: {e}")
         await message.answer(
             "⚠️ Ошибка при выдаче конфигурации. Попробуйте позже.",
             reply_markup=get_config_keyboard(),
         )
+
+
+@router.message(F.text == "📥 Получить конфигурацию")
+async def get_config(message: Message):
+    await _issue_config_with_device(message)
+
+
+@router.message(F.text == "🔌 Подключить устройство")
+async def connect_device_btn(message: Message):
+    await _issue_config_with_device(message)
 
 
 @router.message(F.text == "💬 Поддержка по настройке")
@@ -827,7 +869,7 @@ def _devices_text(telegram_id: int) -> tuple[str, bool]:
             created_short = (created or "")[:16]
             parts.append(f"• {label}  <i>#{sid}</i>  <code>{created_short}</code>")
     else:
-        parts.append("Пока пусто — добавьте телефон, ПК и т.д.")
+        parts.append("Пока пусто. «Подключиться» / «Получить конфигурацию» займёт слот и выдаст ссылку.")
     parts += [
         "",
         "Учёт устройств по тарифу. Один конфиг можно поставить "
@@ -847,28 +889,9 @@ async def devices(message: Message):
 
 @router.message(F.text == "➕ Добавить устройство")
 async def device_add(message: Message, state: FSMContext):
-    profile = get_profile(message.from_user.id)
-    if not profile or not profile[3]:
-        await message.answer("Нужна активная подписка.", reply_markup=profile_keyboard())
-        return
-    plan = profile[3]
-    limit = get_device_limit(plan)
-    used = len(list_device_slots(message.from_user.id))
-    if used >= limit:
-        nl = chr(10)
-        await message.answer(
-            f"❌ Лимит тарифа <b>{plan}</b>: {limit} устройств." + nl
-            + "Удалите слот или смените тариф.",
-            reply_markup=devices_keyboard(),
-        )
-        return
-    await state.set_state(DeviceState.waiting_label)
-    nl = chr(10)
-    await message.answer(
-        "Как назвать устройство?" + nl
-        + "Например: <code>iPhone</code>, <code>Ноутбук</code>, <code>ПК</code>" + nl + nl
-        + "Или /cancel — отмена."
-    )
+    await state.clear()
+    await _issue_config_with_device(message)
+
 
 
 @router.message(DeviceState.waiting_label, F.text == "/cancel")
@@ -902,7 +925,7 @@ async def device_label_save(message: Message, state: FSMContext):
     )
 
 
-@router.message(F.text == "🗑 Удалить устройство")
+@router.message(F.text == "🗑 Освободить слот")
 async def device_del_hint(message: Message):
     slots = list_device_slots(message.from_user.id)
     if not slots:
@@ -914,7 +937,7 @@ async def device_del_hint(message: Message):
     ]
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="devdel:cancel")])
     await message.answer(
-        "Какое устройство удалить?",
+        "Какой слот освободить?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 

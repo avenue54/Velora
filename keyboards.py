@@ -129,9 +129,9 @@ def platform_macos_keyboard() -> ReplyKeyboardMarkup:
 def get_config_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="💳 Выбрать тариф")],
+            [KeyboardButton(text="🔌 Подключить устройство")],
             [KeyboardButton(text="👤 Мой аккаунт")],
-            [KeyboardButton(text="⬅️ Назад"), KeyboardButton(text="🏠 Главное меню")],
+            [KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
     )
@@ -264,7 +264,8 @@ def change_tariff_keyboard(current_plan: str) -> ReplyKeyboardMarkup:
 def devices_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="➕ Добавить устройство"), KeyboardButton(text="🗑 Удалить устройство")],
+            [KeyboardButton(text="🔌 Подключить устройство")],
+            [KeyboardButton(text="🗑 Освободить слот")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
         resize_keyboard=True
