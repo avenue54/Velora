@@ -30,6 +30,7 @@ from keyboard_admin import (
 from admin_texts import (
     ADMIN_PANEL_TEXT,
     STATISTICS_TEXT,
+    admin_welcome,
 )
 from config import ADMIN_ID
 from states import BroadcastState, AdminAuthState, PromoAdminState
@@ -76,7 +77,7 @@ async def admin_entry(message: Message, state: FSMContext):
     if _is_authed(message.from_user.id):
         name = get_admin_display_name()
         await message.answer(
-            f"👋 С возвращением, <b>{name}</b>!\n\n" + ADMIN_PANEL_TEXT,
+            admin_welcome(name),
             reply_markup=admin_main_keyboard(),
         )
         return
@@ -131,7 +132,7 @@ async def admin_check_password(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(
-        f"👋 Привет, <b>{name}</b>!\n\n" + ADMIN_PANEL_TEXT,
+        admin_welcome(name),
         reply_markup=admin_main_keyboard(),
     )
 
@@ -152,7 +153,7 @@ async def admin_set_name(message: Message, state: FSMContext):
     _admin_sessions.add(message.from_user.id)
     await state.clear()
     await message.answer(
-        f"👋 Приятно познакомиться, <b>{name}</b>!\n\n" + ADMIN_PANEL_TEXT,
+        admin_welcome(name),
         reply_markup=admin_main_keyboard(),
     )
 
