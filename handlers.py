@@ -83,12 +83,14 @@ from database import (
     set_referred_by,
     count_referrals,
     get_promo,
+    is_promo_valid,
     apply_promo_use,
     count_device_slots,
     list_device_slots,
     add_device_slot,
     remove_device_slot,
     get_referral_reward_by_payment,
+    extend_active_subscription_days,
 )
 from states import SubscriptionState, RenewalState, ChangeTariffState, DeviceState, PromoUserState
 from services import (
@@ -915,25 +917,34 @@ async def promo_user_apply(message: Message, state: FSMContext):
     code = (message.text or "").strip().upper()
     promo = get_promo(code)
     await state.clear()
-    if not promo or not promo[6]:
-        await message.answer("❌ Промокод не найден или неактивен.")
+    ok, err = is_promo_valid(promo)
+    if not ok:
+        await message.answer(f"❌ {err}")
         return
-    if promo[4] and promo[5] >= promo[4]:
-        await message.answer("❌ Лимит использований исчерпан.")
-        return
+    bonus_days = int(promo[3] or 0)
     if not apply_promo_use(promo[0], message.from_user.id):
         await message.answer("❌ Вы уже использовали этот промокод.")
         return
-    await message.answer(
-        f"✅ Промокод <code>{promo[1]}</code> принят!\n"
-        f"Скидка: {promo[2]}%\n"
-        f"Бонусные дни: {promo[3]}"
-    )
 
-
-# ======================
-# ОПЛАТА (Platega-ready stubs)
-# ======================
+    ok, info = extend_active_subscription_days(message.from_user.id, bonus_days)
+    nl = chr(10)
+    if ok and info != "stored_bonus":
+        await message.answer(
+            f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
+            + f"Вам начислено <b>+{bonus_days} дн.</b> к подписке." + nl
+            + f"Новая дата окончания: <b>{info}</b>"
+        )
+    elif ok:
+        await message.answer(
+            f"✅ Промокод <code>{promo[1]}</code> принят!" + nl + nl
+            + f"Вам начислено <b>+{bonus_days} дн.</b>." + nl
+            + "Активной подписки нет — дни добавятся при активации."
+        )
+    else:
+        await message.answer(
+            "✅ Промокод учтён, но не удалось продлить подписку. "
+            "Напишите в поддержку."
+        )
 
 @router.callback_query(F.data == "payment:pay")
 async def pay_button(callback: CallbackQuery):

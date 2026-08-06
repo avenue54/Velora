@@ -144,9 +144,14 @@ def create_database():
         max_uses INTEGER DEFAULT 0,
         used_count INTEGER DEFAULT 0,
         active INTEGER DEFAULT 1,
-        created_at TEXT
+        created_at TEXT,
+        expires_at TEXT
     )
     """)
+    try:
+        cursor.execute("ALTER TABLE promo_codes ADD COLUMN expires_at TEXT")
+    except Exception:
+        pass
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS promo_uses (
@@ -411,6 +416,28 @@ def activate_subscription(subscription_id):
         end_date = start_date + timedelta(days=90)
     else:
         end_date = start_date + timedelta(days=30)
+
+    # бонусные дни с промокода / рефералки (users.bonus_days)
+    cursor.execute(
+        """
+        SELECT users.telegram_id, COALESCE(users.bonus_days, 0)
+        FROM subscriptions
+        JOIN users ON subscriptions.user_id = users.id
+        WHERE subscriptions.id = ?
+        """,
+        (subscription_id,),
+    )
+    urow = cursor.fetchone()
+    extra = 0
+    tg_id = None
+    if urow:
+        tg_id, extra = urow[0], int(urow[1] or 0)
+    if extra > 0:
+        end_date = end_date + timedelta(days=extra)
+        cursor.execute(
+            "UPDATE users SET bonus_days = 0 WHERE telegram_id = ?",
+            (tg_id,),
+        )
 
     cursor.execute(
         """
@@ -950,21 +977,36 @@ def count_referrals(telegram_id: int) -> int:
     return n
 
 
-def create_promo_code(code: str, discount_percent: int = 0, bonus_days: int = 0, max_uses: int = 0) -> bool:
+def create_promo_code(
+    code: str,
+    bonus_days: int = 0,
+    expires_in_days: int = 0,
+    discount_percent: int = 0,
+    max_uses: int = 0,
+) -> bool:
+    """
+    expires_in_days: 0 = бессрочный, иначе промо действует N дней с момента создания.
+    """
     conn = get_connection()
     cursor = conn.cursor()
+    created = datetime.now()
+    expires_at = None
+    if int(expires_in_days) > 0:
+        expires_at = (created + timedelta(days=int(expires_in_days))).strftime("%Y-%m-%d %H:%M:%S")
     try:
         cursor.execute(
             """
-            INSERT INTO promo_codes (code, discount_percent, bonus_days, max_uses, used_count, active, created_at)
-            VALUES (?, ?, ?, ?, 0, 1, ?)
+            INSERT INTO promo_codes
+            (code, discount_percent, bonus_days, max_uses, used_count, active, created_at, expires_at)
+            VALUES (?, ?, ?, ?, 0, 1, ?, ?)
             """,
             (
                 code.strip().upper(),
                 int(discount_percent),
                 int(bonus_days),
                 int(max_uses),
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                created.strftime("%Y-%m-%d %H:%M:%S"),
+                expires_at,
             ),
         )
         conn.commit()
@@ -976,10 +1018,18 @@ def create_promo_code(code: str, discount_percent: int = 0, bonus_days: int = 0,
 
 
 def get_promo(code: str):
+    """
+    Returns tuple:
+    id, code, discount_percent, bonus_days, max_uses, used_count, active, expires_at
+    or None
+    """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, code, discount_percent, bonus_days, max_uses, used_count, active FROM promo_codes WHERE code = ?",
+        """
+        SELECT id, code, discount_percent, bonus_days, max_uses, used_count, active, expires_at
+        FROM promo_codes WHERE code = ?
+        """,
         (code.strip().upper(),),
     )
     row = cursor.fetchone()
@@ -987,11 +1037,37 @@ def get_promo(code: str):
     return row
 
 
+def is_promo_valid(promo_row) -> tuple[bool, str]:
+    """promo_row from get_promo. Returns (ok, error_message)."""
+    if not promo_row:
+        return False, "Промокод не найден."
+    # indices: 0 id, 1 code, 2 disc, 3 days, 4 max, 5 used, 6 active, 7 expires
+    if len(promo_row) < 7 or not promo_row[6]:
+        return False, "Промокод неактивен."
+    expires = promo_row[7] if len(promo_row) > 7 else None
+    if expires:
+        try:
+            exp = datetime.strptime(expires, "%Y-%m-%d %H:%M:%S")
+            if datetime.now() > exp:
+                return False, "Срок действия промокода истёк."
+        except ValueError:
+            pass
+    max_uses, used = promo_row[4], promo_row[5]
+    if max_uses and used >= max_uses:
+        return False, "Лимит использований исчерпан."
+    if int(promo_row[3] or 0) <= 0:
+        return False, "Промокод не даёт дней."
+    return True, ""
+
+
 def list_promo_codes():
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, code, discount_percent, bonus_days, max_uses, used_count, active FROM promo_codes ORDER BY id DESC"
+        """
+        SELECT id, code, discount_percent, bonus_days, max_uses, used_count, active, expires_at
+        FROM promo_codes ORDER BY id DESC
+        """
     )
     rows = cursor.fetchall()
     conn.close()

@@ -29,6 +29,7 @@ class PromoAdminState(StatesGroup):
     waiting_discount = State()
     waiting_bonus_days = State()
     waiting_max_uses = State()
+    waiting_expires = State()
 
 
 class DeviceState(StatesGroup):

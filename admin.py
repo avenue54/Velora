@@ -1,4 +1,4 @@
-# admin.py
+# admin.py — панель с паролем и именем
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -12,6 +12,15 @@ from database import (
     activate_subscription,
     get_all_telegram_ids,
     get_subscription_user_telegram_id,
+    is_admin_password_set,
+    check_admin_password,
+    set_admin_password,
+    get_admin_display_name,
+    set_admin_display_name,
+    create_promo_code,
+    list_promo_codes,
+    deactivate_promo,
+    admin_get,
 )
 from keyboard_admin import (
     admin_main_keyboard,
@@ -23,60 +32,173 @@ from admin_texts import (
     STATISTICS_TEXT,
 )
 from config import ADMIN_ID
-from states import BroadcastState
+from states import BroadcastState, AdminAuthState, PromoAdminState
 from api import create_vpn_subscription, VeloraAPIError
 from database import get_connection
 
 router = Router()
 
+# Сессии: telegram_id -> True после успешного ввода пароля (до рестарта бота)
+_admin_sessions: set[int] = set()
+
+
+def _is_owner(tg_id: int) -> bool:
+    return tg_id == ADMIN_ID
+
+
+def _is_authed(tg_id: int) -> bool:
+    return _is_owner(tg_id) and tg_id in _admin_sessions
+
 
 # ======================
-# АДМИН ПАНЕЛЬ
+# /admin → пароль → имя
 # ======================
 
 @router.message(Command("admin"))
-async def admin_panel(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID:
+async def admin_entry(message: Message, state: FSMContext):
+    if not _is_owner(message.from_user.id):
+        return
+
+    await state.clear()
+
+    # Первый запуск: задать пароль
+    if not is_admin_password_set():
+        await state.set_state(AdminAuthState.waiting_new_password)
+        await message.answer(
+            "🛠 <b>Настройка админ-панели</b>\n\n"
+            "Пароль ещё не задан.\n"
+            "Придумайте пароль (минимум 6 символов) и отправьте его сюда.\n\n"
+            "⚠️ Сообщение с паролем лучше потом удалить из чата."
+        )
+        return
+
+    # Уже в сессии
+    if _is_authed(message.from_user.id):
+        name = get_admin_display_name()
+        await message.answer(
+            f"👋 С возвращением, <b>{name}</b>!\n\n" + ADMIN_PANEL_TEXT,
+            reply_markup=admin_main_keyboard(),
+        )
+        return
+
+    await state.set_state(AdminAuthState.waiting_password)
+    await message.answer(
+        "🔐 <b>Вход в админ-панель</b>\n\n"
+        "Введите пароль:"
+    )
+
+
+@router.message(AdminAuthState.waiting_new_password)
+async def admin_set_password(message: Message, state: FSMContext):
+    if not _is_owner(message.from_user.id):
+        return
+    pwd = (message.text or "").strip()
+    if len(pwd) < 6:
+        await message.answer("Пароль слишком короткий. Минимум 6 символов.")
+        return
+    set_admin_password(pwd)
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    await state.set_state(AdminAuthState.waiting_name)
+    await message.answer(
+        "✅ Пароль сохранён.\n\n"
+        "Как к вам обращаться? Напишите имя (например: Даниил):"
+    )
+
+
+@router.message(AdminAuthState.waiting_password)
+async def admin_check_password(message: Message, state: FSMContext):
+    if not _is_owner(message.from_user.id):
+        return
+    pwd = (message.text or "").strip()
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    if not check_admin_password(pwd):
+        await message.answer("❌ Неверный пароль. /admin — попробовать снова.")
+        await state.clear()
+        return
+
+    _admin_sessions.add(message.from_user.id)
+    name = get_admin_display_name()
+    if not admin_get_name_set():
+        await state.set_state(AdminAuthState.waiting_name)
+        await message.answer("✅ Пароль верный.\n\nКак к вам обращаться? Напишите имя:")
         return
 
     await state.clear()
     await message.answer(
-        ADMIN_PANEL_TEXT,
+        f"👋 Привет, <b>{name}</b>!\n\n" + ADMIN_PANEL_TEXT,
         reply_markup=admin_main_keyboard(),
     )
 
 
+def admin_get_name_set() -> bool:
+    return bool(admin_get("display_name"))
+
+
+@router.message(AdminAuthState.waiting_name)
+async def admin_set_name(message: Message, state: FSMContext):
+    if not _is_owner(message.from_user.id):
+        return
+    name = (message.text or "").strip()
+    if len(name) < 2:
+        await message.answer("Имя слишком короткое. Попробуйте ещё раз:")
+        return
+    set_admin_display_name(name)
+    _admin_sessions.add(message.from_user.id)
+    await state.clear()
+    await message.answer(
+        f"👋 Приятно познакомиться, <b>{name}</b>!\n\n" + ADMIN_PANEL_TEXT,
+        reply_markup=admin_main_keyboard(),
+    )
+
+
+def _require_admin(message: Message) -> bool:
+    if not _is_owner(message.from_user.id):
+        return False
+    if not _is_authed(message.from_user.id):
+        return False
+    return True
+
+
+# ======================
+# ПУНКТЫ МЕНЮ
+# ======================
+
 @router.message(F.text == "👥 Пользователи")
 async def users_list(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if not _require_admin(message):
         return
 
     users = get_all_users()
-    text = "👥 Пользователи:\n\n"
+    if not users:
+        await message.answer("Пользователей пока нет.")
+        return
 
-    for user in users:
+    text = "👥 <b>Пользователи</b> (последние 30):\n\n"
+    for user in users[-30:]:
         text += (
-            f"ID: {user[0]}\n"
-            f"TG: {user[1]}\n"
-            f"Имя: {user[3]}\n"
-            f"Статус: {user[4]}\n\n"
+            f"• ID {user[0]} | TG <code>{user[1]}</code>\n"
+            f"  {user[3] or '—'} | @{user[2] or '—'} | {user[4]}\n"
         )
-
     await message.answer(text)
 
 
 @router.message(F.text == "💳 Подписки")
 async def subscriptions_list(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if not _require_admin(message):
         return
 
     data = get_subscriptions()
-
     if not data:
         await message.answer("💳 Подписок пока нет")
         return
 
-    for sub in data:
+    for sub in data[:20]:
         (
             sub_id,
             name,
@@ -90,15 +212,12 @@ async def subscriptions_list(message: Message):
 
         text = (
             f"💳 Заявка #{sub_id}\n\n"
-            f"👤 Пользователь: {name}\n"
-            f"🆔 Telegram ID: {telegram_id}\n\n"
-            f"💳 Тариф: {plan}\n"
-            f"📅 Срок: {period}\n"
-            f"💰 Цена: {price}\n\n"
-            f"📊 Статус: {status}\n"
+            f"👤 {name}\n"
+            f"🆔 <code>{telegram_id}</code>\n"
+            f"💳 {plan} · {period} · {price}\n"
+            f"📊 {status}\n"
             f"🕒 {date}"
         )
-
         await message.answer(
             text,
             reply_markup=subscription_admin_keyboard(sub_id),
@@ -107,203 +226,280 @@ async def subscriptions_list(message: Message):
 
 @router.message(F.text == "📊 Статистика")
 async def statistics(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if not _require_admin(message):
         return
 
-    data = get_statistics()
-    await message.answer(
-        STATISTICS_TEXT.format(
-            users=data["users"],
-            subscriptions=data["subscriptions"],
-            active=data["active"],
-            pending=data["pending"],
+    stats = get_statistics()
+    # stats: users, subscriptions, active, pending — depends on implementation
+    if isinstance(stats, dict):
+        text = STATISTICS_TEXT.format(
+            users=stats.get("users", 0),
+            subscriptions=stats.get("subscriptions", 0),
+            active=stats.get("active", 0),
+            pending=stats.get("pending", 0),
         )
+    elif isinstance(stats, (tuple, list)) and len(stats) >= 4:
+        text = STATISTICS_TEXT.format(
+            users=stats[0],
+            subscriptions=stats[1],
+            active=stats[2],
+            pending=stats[3],
+        )
+    else:
+        text = f"📊 Статистика:\n{stats}"
+    await message.answer(text)
+
+
+@router.message(F.text == "🎁 Промокоды")
+async def promo_menu(message: Message, state: FSMContext):
+    if not _require_admin(message):
+        return
+    rows = list_promo_codes()
+    text = "🎁 <b>Промокоды</b>\n\n"
+    if not rows:
+        text += "Пока нет промокодов.\n"
+    else:
+        for r in rows[:20]:
+            # id, code, discount, bonus_days, max_uses, used, active
+            status = "🟢" if r[6] else "🔴"
+            text += (
+                f"{status} <code>{r[1]}</code> — +{r[3]} дн. "
+                f"до {r[7] or '∞'} ({r[5]} исп.)\n"
+            )
+    text += "\nСоздать: /new_promo\nОтключить: /promo_off КОД"
+    await message.answer(text)
+
+
+@router.message(Command("new_promo"))
+async def new_promo(message: Message, state: FSMContext):
+    if not _require_admin(message):
+        return
+    await state.set_state(PromoAdminState.waiting_code)
+    await message.answer(
+        "🎁 <b>Новый промокод</b>\n\n"
+        "1. Название (код, который вводят пользователи)\n\n"
+        "Напишите название:"
     )
 
 
-# ======================
-# РАССЫЛКА
-# ======================
+@router.message(Command("promo_new"))  # алиас
+async def promo_new_alias(message: Message, state: FSMContext):
+    await new_promo(message, state)
+
+
+@router.message(PromoAdminState.waiting_code)
+async def promo_code_entered(message: Message, state: FSMContext):
+    if not _require_admin(message):
+        return
+    code = (message.text or "").strip().upper()
+    if len(code) < 3:
+        await message.answer("Слишком короткое название (мин. 3 символа).")
+        return
+    await state.update_data(code=code)
+    await state.set_state(PromoAdminState.waiting_bonus_days)
+    await message.answer(
+        "2. Сколько <b>+дней</b> даёт промокод?\n"
+        "Напишите число (например 7):"
+    )
+
+
+@router.message(PromoAdminState.waiting_discount)
+async def promo_discount_entered(message: Message, state: FSMContext):
+    if not _require_admin(message):
+        return
+    await state.set_state(PromoAdminState.waiting_bonus_days)
+    await message.answer("2. Сколько +дней? Напишите число:")
+
+
+@router.message(PromoAdminState.waiting_bonus_days)
+async def promo_bonus_entered(message: Message, state: FSMContext):
+    if not _require_admin(message):
+        return
+    try:
+        b = int((message.text or "0").strip())
+    except ValueError:
+        await message.answer("Нужно целое число дней.")
+        return
+    if b <= 0:
+        await message.answer("Дни должны быть больше 0.")
+        return
+    await state.update_data(bonus_days=b)
+    await state.set_state(PromoAdminState.waiting_expires)
+    await message.answer(
+        "3. Окончание промо (срок действия кода в днях).\n"
+        "• <b>0</b> — бессрочный\n"
+        "• <b>30</b> — действует 30 дней с сейчас\n\n"
+        "Напишите число:"
+    )
+
+
+@router.message(PromoAdminState.waiting_max_uses)
+async def promo_max_legacy(message: Message, state: FSMContext):
+    """Старый шаг — перенаправляем на expires."""
+    if not _require_admin(message):
+        return
+    await state.set_state(PromoAdminState.waiting_expires)
+    await message.answer(
+        "3. Окончание промо (дней, 0 = бессрочно):"
+    )
+
+
+@router.message(PromoAdminState.waiting_expires)
+async def promo_expires_entered(message: Message, state: FSMContext):
+    if not _require_admin(message):
+        return
+    try:
+        exp_days = int((message.text or "0").strip())
+    except ValueError:
+        await message.answer("Нужно число (0 = бессрочно).")
+        return
+    if exp_days < 0:
+        await message.answer("Не может быть отрицательным.")
+        return
+    data = await state.get_data()
+    code = data["code"]
+    days = int(data.get("bonus_days", 0))
+    ok = create_promo_code(
+        code=code,
+        bonus_days=days,
+        expires_in_days=exp_days,
+        discount_percent=0,
+        max_uses=0,
+    )
+    await state.clear()
+    if not ok:
+        await message.answer("❌ Не удалось создать (возможно, такое название уже есть).")
+        return
+    if exp_days == 0:
+        exp_txt = "бессрочно"
+    else:
+        exp_txt = f"{exp_days} дн. с сегодня"
+    nl = chr(10)
+    await message.answer(
+        f"✅ Промокод <code>{code}</code> создан" + nl + nl
+        + f"• +{days} дн. к подписке" + nl
+        + f"• Срок действия кода: {exp_txt}",
+        reply_markup=admin_main_keyboard(),
+    )
+
+
+@router.message(Command("promo_off"))
+async def promo_off(message: Message):
+    if not _require_admin(message):
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Использование: /promo_off КОД")
+        return
+    deactivate_promo(parts[1])
+    await message.answer(f"🔴 Промокод <code>{parts[1].strip().upper()}</code> отключён.")
+
 
 @router.message(F.text == "📢 Рассылка")
 async def broadcast_start(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID:
+    if not _require_admin(message):
         return
-
     await state.set_state(BroadcastState.waiting_message)
     await message.answer(
-        "📢 Рассылка\n\n"
-        "Напишите сообщение, которое получат все пользователи бота.\n\n"
-        "Поддерживается HTML-разметка.\n"
-        "Для отмены нажмите «❌ Отмена рассылки».",
+        "📢 Отправьте сообщение для рассылки (текст).\n"
+        "Или нажмите «❌ Отмена рассылки».",
         reply_markup=broadcast_cancel_keyboard(),
     )
 
 
 @router.message(F.text == "❌ Отмена рассылки")
 async def broadcast_cancel(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID:
+    if not _require_admin(message):
         return
-
     await state.clear()
-    await message.answer(
-        "❌ Рассылка отменена",
-        reply_markup=admin_main_keyboard(),
-    )
+    await message.answer("Рассылка отменена.", reply_markup=admin_main_keyboard())
 
 
 @router.message(BroadcastState.waiting_message)
 async def broadcast_send(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID:
+    if not _require_admin(message):
         return
-
-    text = message.text or message.caption
+    text = message.text or message.caption or ""
     if not text:
-        await message.answer(
-            "❌ Нужен текст сообщения. Попробуйте ещё раз или отмените рассылку."
-        )
+        await message.answer("Нужен текст.")
         return
-
-    users = get_all_telegram_ids()
-    total = len(users)
-    success = 0
-    fail = 0
-
-    await message.answer(f"📤 Рассылка запущена...\nПолучателей: {total}")
-
-    for tg_id in users:
+    ids = get_all_telegram_ids()
+    ok = fail = 0
+    for tg_id in ids:
         try:
-            await message.bot.send_message(
-                chat_id=tg_id,
-                text=f"📢 <b>Сообщение от VELORA</b>\n\n{text}",
-            )
-            success += 1
-        except Exception as e:
-            print(f"Broadcast fail {tg_id}: {e}")
+            await message.bot.send_message(tg_id, text)
+            ok += 1
+        except Exception:
             fail += 1
-
     await state.clear()
     await message.answer(
-        f"✅ Рассылка завершена\n\n"
-        f"Успешно: {success}\n"
-        f"Ошибок: {fail}\n"
-        f"Всего: {total}",
+        f"✅ Рассылка: отправлено {ok}, ошибок {fail}.",
         reply_markup=admin_main_keyboard(),
     )
 
 
+@router.message(F.text == "🏠 Главное меню")
+async def admin_to_main(message: Message, state: FSMContext):
+    if not _is_owner(message.from_user.id):
+        return
+    await state.clear()
+    from keyboards import main_keyboard
+    await message.answer("Главное меню", reply_markup=main_keyboard())
+
+
+@router.message(Command("admin_logout"))
+async def admin_logout(message: Message, state: FSMContext):
+    if not _is_owner(message.from_user.id):
+        return
+    _admin_sessions.discard(message.from_user.id)
+    await state.clear()
+    await message.answer("🔒 Вы вышли из админ-панели.")
+
+
+@router.message(Command("admin_setpass"))
+async def admin_change_pass(message: Message, state: FSMContext):
+    if not _require_admin(message):
+        return
+    await state.set_state(AdminAuthState.waiting_new_password)
+    await message.answer("Введите новый пароль (мин. 6 символов):")
+
+
 # ======================
-# АКТИВАЦИЯ / ОТКЛОНЕНИЕ
+# Активация / отклонение
 # ======================
 
 @router.callback_query(F.data.startswith("activate:"))
-async def activate_subscription_handler(callback: CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+async def activate_sub(callback: CallbackQuery):
+    if not _is_authed(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
-
-    subscription_id = int(callback.data.split(":")[1])
-    print("АКТИВАЦИЯ:", subscription_id)
-
-    activate_subscription(subscription_id)
-
-    plan, period = "", ""
+    sub_id = int(callback.data.split(":")[1])
+    activate_subscription(sub_id)
+    tg_id = get_subscription_user_telegram_id(sub_id)
     try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT plan, period FROM subscriptions WHERE id = ?",
-            (subscription_id,),
-        )
-        row = cur.fetchone()
-        conn.close()
-        if row:
-            plan, period = row[0] or "", row[1] or ""
-    except Exception as e:
-        print(f"Load plan fail: {e}")
-
-    user_tg_id = get_subscription_user_telegram_id(subscription_id)
-    vpn_url = None
-    vpn_error = None
-
-    if user_tg_id:
-        try:
-            data = await create_vpn_subscription(
-                telegram_id=user_tg_id,
-                plan=plan,
-                period=period,
+        if tg_id:
+            await create_vpn_subscription(tg_id)
+            await callback.bot.send_message(
+                tg_id,
+                f"✅ Подписка #{sub_id} активирована!\n"
+                "Конфиг: «📥 Получить конфигурацию».",
             )
-            vpn_url = data.get("url")
-        except VeloraAPIError as e:
-            vpn_error = str(e)
-            print(f"VPN API error: {e} body={getattr(e, 'body', None)}")
-        except Exception as e:
-            vpn_error = str(e)
-            print(f"VPN provision fail: {e}")
-
-        try:
-            if vpn_url:
-                await callback.bot.send_message(
-                    chat_id=user_tg_id,
-                    text=(
-                        "✅ <b>Подписка активирована!</b>\n\n"
-                        f"Заявка #{subscription_id} подтверждена.\n"
-                        "Доступ к VELORA открыт.\n\n"
-                        "📥 <b>Ваша конфигурация WireGuard:</b>\n"
-                        f"<code>{vpn_url}</code>\n\n"
-                        "Откройте ссылку или импортируйте в WireGuard "
-                        "(Add tunnel → from URL / file).\n\n"
-                        "Инструкция: «📖 Инструкция» в меню бота."
-                    ),
-                )
-            else:
-                await callback.bot.send_message(
-                    chat_id=user_tg_id,
-                    text=(
-                        "✅ <b>Подписка активирована!</b>\n\n"
-                        f"Заявка #{subscription_id} подтверждена.\n"
-                        "Доступ открыт, но ссылка на конфиг временно недоступна.\n"
-                        "Напишите в поддержку — выдадим вручную."
-                    ),
-                )
-        except Exception as e:
-            print(f"Notify activate fail: {e}")
-
-    await callback.message.delete()
-    extra = f"\n🔗 {vpn_url}" if vpn_url else (f"\n⚠️ VPN: {vpn_error}" if vpn_error else "")
-    await callback.message.answer(
-        f"✅ Подписка #{subscription_id} активирована{extra}"
-    )
-    await callback.answer()
+    except VeloraAPIError as e:
+        await callback.message.answer(f"Подписка в БД ок, API: {e}")
+    except Exception as e:
+        await callback.message.answer(f"Уведомление: {e}")
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.answer("Активировано")
+    await callback.message.answer(f"✅ Подписка #{sub_id} активирована")
 
 
 @router.callback_query(F.data.startswith("reject:"))
-async def reject_subscription_handler(callback: CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+async def reject_sub(callback: CallbackQuery):
+    if not _is_authed(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
-
-    subscription_id = int(callback.data.split(":")[1])
-    print("ОТКЛОНЕНИЕ:", subscription_id)
-
-    update_subscription_status(subscription_id, "rejected")
-
-    user_tg_id = get_subscription_user_telegram_id(subscription_id)
-    if user_tg_id:
-        try:
-            await callback.bot.send_message(
-                chat_id=user_tg_id,
-                text=(
-                    "❌ <b>Подписка не активирована</b>\n\n"
-                    f"Заявка #{subscription_id} отклонена.\n\n"
-                    "Если вы оплатили, напишите в поддержку — разберёмся."
-                ),
-            )
-        except Exception as e:
-            print(f"Notify reject fail: {e}")
-
-    await callback.message.delete()
-    await callback.message.answer(
-        f"❌ Подписка #{subscription_id} отклонена"
-    )
-    await callback.answer()
+    sub_id = int(callback.data.split(":")[1])
+    update_subscription_status(sub_id, "rejected")
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.answer("Отклонено")
+    await callback.message.answer(f"❌ Подписка #{sub_id} отклонена")
