@@ -16,3 +16,24 @@ class ChangeTariffState(StatesGroup):
 
 class BroadcastState(StatesGroup):
     waiting_message = State()
+
+
+class AdminAuthState(StatesGroup):
+    waiting_password = State()
+    waiting_name = State()
+    waiting_new_password = State()
+
+
+class PromoAdminState(StatesGroup):
+    waiting_code = State()
+    waiting_discount = State()
+    waiting_bonus_days = State()
+    waiting_max_uses = State()
+
+
+class DeviceState(StatesGroup):
+    waiting_label = State()
+
+
+class PromoUserState(StatesGroup):
+    waiting_code = State()
