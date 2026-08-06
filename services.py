@@ -16,7 +16,10 @@ from database import (
     create_subscription,
     activate_subscription as db_activate_subscription,
     get_connection,
+    grant_referral_bonus_for_payment,  
 )
+
+
 from platega import (
     PlategaError,
     parse_amount_rub,
@@ -267,6 +270,24 @@ def payment_success(payment_id: int, provider_payment_id=None) -> bool:
         conn.close()
         if row:
             db_activate_subscription(row[0])
+
+    # Реферальный бонус: +3 дня пригласившему
+    try:
+        bonus = grant_referral_bonus_for_payment(telegram_id, payment_id, days=3)
+        if bonus.get("granted"):
+            logger.info(
+                "Referral +3d: buyer=%s referrer=%s end=%s",
+                telegram_id,
+                bonus.get("referrer"),
+                bonus.get("new_end"),
+            )
+            # сохраним в «глобальный» атрибут для уведомления из handlers/webhook
+            payment_success.last_referral_bonus = bonus  # type: ignore
+        else:
+            payment_success.last_referral_bonus = bonus  # type: ignore
+    except Exception as e:
+        logger.exception("Referral bonus error: %s", e)
+        payment_success.last_referral_bonus = None  # type: ignore
 
     return True
 

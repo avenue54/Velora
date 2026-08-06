@@ -1,6 +1,9 @@
 import sqlite3
 from datetime import datetime, timedelta
 import os
+import hashlib
+import secrets
+import string
 
 DB_NAME = "/app/data/velora.db"
 
@@ -117,6 +120,72 @@ def create_database():
     )
     """)
 
+
+    # --- referral / promo / admin ---
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN referral_code TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN referred_by INTEGER")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN bonus_days INTEGER DEFAULT 0")
+    except Exception:
+        pass
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS promo_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        discount_percent INTEGER DEFAULT 0,
+        bonus_days INTEGER DEFAULT 0,
+        max_uses INTEGER DEFAULT 0,
+        used_count INTEGER DEFAULT 0,
+        active INTEGER DEFAULT 1,
+        created_at TEXT
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS promo_uses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        promo_id INTEGER,
+        telegram_id INTEGER,
+        used_at TEXT,
+        UNIQUE(promo_id, telegram_id)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS admin_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS referral_rewards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        referrer_tg INTEGER NOT NULL,
+        buyer_tg INTEGER NOT NULL,
+        days INTEGER NOT NULL,
+        payment_id INTEGER,
+        created_at TEXT,
+        UNIQUE(buyer_tg, payment_id)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS device_slots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        telegram_id INTEGER NOT NULL,
+        label TEXT,
+        created_at TEXT
+    )
+    """)
+
     # Добавление тарифов
     cursor.execute("SELECT COUNT(*) FROM plans")
     count = cursor.fetchone()[0]
@@ -145,22 +214,42 @@ def create_database():
 # ПОЛЬЗОВАТЕЛИ
 # =========================
 
-def add_user(telegram_id, username, first_name):
+def _gen_referral_code(telegram_id: int) -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    suffix = "".join(secrets.choice(alphabet) for _ in range(4))
+    return f"VL{telegram_id % 100000}{suffix}"
+
+
+def add_user(telegram_id, username, first_name, referred_by=None):
     conn = get_connection()
     cursor = conn.cursor()
+    code = _gen_referral_code(telegram_id)
     cursor.execute(
         """
         INSERT OR IGNORE INTO users
-        (telegram_id, username, first_name, created_at)
-        VALUES (?, ?, ?, ?)
+        (telegram_id, username, first_name, created_at, referral_code, referred_by)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             telegram_id,
             username,
             first_name,
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            code,
+            referred_by,
         ),
     )
+    # если пользователь уже был — дописать referral_code если пустой
+    cursor.execute(
+        "SELECT referral_code FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    row = cursor.fetchone()
+    if row and not row[0]:
+        cursor.execute(
+            "UPDATE users SET referral_code = ? WHERE telegram_id = ?",
+            (code, telegram_id),
+        )
     conn.commit()
     conn.close()
 
@@ -728,3 +817,444 @@ def get_vpn_config(telegram_id):
     conn.close()
 
     return data
+
+
+# =========================
+# ADMIN SETTINGS
+# =========================
+
+def admin_get(key: str, default=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM admin_settings WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else default
+
+
+def admin_set(key: str, value: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO admin_settings (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (key, value),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
+    if not salt:
+        salt = secrets.token_hex(16)
+    digest = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
+    return digest, salt
+
+
+def set_admin_password(password: str) -> None:
+    digest, salt = hash_password(password)
+    admin_set("password_hash", digest)
+    admin_set("password_salt", salt)
+
+
+def check_admin_password(password: str) -> bool:
+    h = admin_get("password_hash")
+    s = admin_get("password_salt")
+    if not h or not s:
+        return False
+    digest, _ = hash_password(password, s)
+    return digest == h
+
+
+def is_admin_password_set() -> bool:
+    return bool(admin_get("password_hash"))
+
+
+def get_admin_display_name() -> str:
+    return admin_get("display_name") or "Админ"
+
+
+def set_admin_display_name(name: str) -> None:
+    admin_set("display_name", name.strip()[:64])
+
+
+# =========================
+# REFERRALS & PROMO
+# =========================
+
+def get_referral_code(telegram_id: int) -> str | None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT referral_code FROM users WHERE telegram_id = ?", (telegram_id,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        conn.close()
+        return row[0]
+    # generate if missing
+    code = _gen_referral_code(telegram_id)
+    cursor.execute(
+        "UPDATE users SET referral_code = ? WHERE telegram_id = ?",
+        (code, telegram_id),
+    )
+    conn.commit()
+    conn.close()
+    return code
+
+
+def get_user_by_referral_code(code: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT telegram_id, id FROM users WHERE referral_code = ?",
+        (code.strip().upper(),),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def set_referred_by(telegram_id: int, referrer_tg_id: int) -> bool:
+    """Привязать реферера только если ещё не привязан и это не сам себя."""
+    if telegram_id == referrer_tg_id:
+        return False
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT referred_by FROM users WHERE telegram_id = ?", (telegram_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return False
+    if row[0]:
+        conn.close()
+        return False
+    cursor.execute(
+        "UPDATE users SET referred_by = ? WHERE telegram_id = ?",
+        (referrer_tg_id, telegram_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def count_referrals(telegram_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) FROM users WHERE referred_by = ?",
+        (telegram_id,),
+    )
+    n = cursor.fetchone()[0]
+    conn.close()
+    return n
+
+
+def create_promo_code(code: str, discount_percent: int = 0, bonus_days: int = 0, max_uses: int = 0) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO promo_codes (code, discount_percent, bonus_days, max_uses, used_count, active, created_at)
+            VALUES (?, ?, ?, ?, 0, 1, ?)
+            """,
+            (
+                code.strip().upper(),
+                int(discount_percent),
+                int(bonus_days),
+                int(max_uses),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.close()
+        return False
+
+
+def get_promo(code: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, code, discount_percent, bonus_days, max_uses, used_count, active FROM promo_codes WHERE code = ?",
+        (code.strip().upper(),),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def list_promo_codes():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, code, discount_percent, bonus_days, max_uses, used_count, active FROM promo_codes ORDER BY id DESC"
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def apply_promo_use(promo_id: int, telegram_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT max_uses, used_count, active FROM promo_codes WHERE id = ?",
+        (promo_id,),
+    )
+    row = cursor.fetchone()
+    if not row or not row[2]:
+        conn.close()
+        return False
+    max_uses, used_count = row[0], row[1]
+    if max_uses and used_count >= max_uses:
+        conn.close()
+        return False
+    try:
+        cursor.execute(
+            "INSERT INTO promo_uses (promo_id, telegram_id, used_at) VALUES (?, ?, ?)",
+            (promo_id, telegram_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        )
+        cursor.execute(
+            "UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?",
+            (promo_id,),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.close()
+        return False
+
+
+def deactivate_promo(code: str) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE promo_codes SET active = 0 WHERE code = ?",
+        (code.strip().upper(),),
+    )
+    conn.commit()
+    conn.close()
+
+
+# =========================
+# DEVICE SLOTS
+# =========================
+
+def count_device_slots(telegram_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) FROM device_slots WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    n = cursor.fetchone()[0]
+    conn.close()
+    return n
+
+
+def list_device_slots(telegram_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, label, created_at FROM device_slots WHERE telegram_id = ? ORDER BY id",
+        (telegram_id,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def add_device_slot(telegram_id: int, label: str, max_devices: int) -> tuple[bool, str]:
+    used = count_device_slots(telegram_id)
+    if used >= max_devices:
+        return False, f"Лимит устройств тарифа: {max_devices}"
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO device_slots (telegram_id, label, created_at) VALUES (?, ?, ?)",
+        (telegram_id, label[:40], datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+    )
+    # sync devices_used on subscription
+    cursor.execute(
+        """
+        UPDATE subscriptions SET devices_used = ?
+        WHERE user_id = (SELECT id FROM users WHERE telegram_id = ?)
+          AND status = 'active'
+        """,
+        (used + 1, telegram_id),
+    )
+    conn.commit()
+    conn.close()
+    return True, "ok"
+
+
+def remove_device_slot(slot_id: int, telegram_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM device_slots WHERE id = ? AND telegram_id = ?",
+        (slot_id, telegram_id),
+    )
+    ok = cursor.rowcount > 0
+    if ok:
+        used = count_device_slots(telegram_id)
+        cursor.execute(
+            """
+            UPDATE subscriptions SET devices_used = ?
+            WHERE user_id = (SELECT id FROM users WHERE telegram_id = ?)
+              AND status = 'active'
+            """,
+            (used, telegram_id),
+        )
+    conn.commit()
+    conn.close()
+    return ok
+
+def get_referred_by(telegram_id: int):
+    """telegram_id реферера или None."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT referred_by FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row and row[0]:
+        return int(row[0])
+    return None
+
+
+def extend_active_subscription_days(telegram_id: int, days: int) -> tuple[bool, str]:
+    """
+    Продлевает активную подписку на days дней.
+    Если подписки нет — копит bonus_days на users.
+    Returns (ok, message).
+    """
+    if days <= 0:
+        return False, "days<=0"
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT subscriptions.id, subscriptions.end_date
+        FROM subscriptions
+        JOIN users ON subscriptions.user_id = users.id
+        WHERE users.telegram_id = ?
+          AND subscriptions.status = 'active'
+        ORDER BY subscriptions.id DESC
+        LIMIT 1
+        """,
+        (telegram_id,),
+    )
+    row = cursor.fetchone()
+    if row:
+        sub_id, end_raw = row
+        try:
+            end = datetime.strptime(end_raw, "%Y-%m-%d %H:%M:%S") if end_raw else datetime.now()
+        except ValueError:
+            end = datetime.now()
+        if end < datetime.now():
+            end = datetime.now()
+        new_end = end + timedelta(days=days)
+        cursor.execute(
+            "UPDATE subscriptions SET end_date = ? WHERE id = ?",
+            (new_end.strftime("%Y-%m-%d %H:%M:%S"), sub_id),
+        )
+        conn.commit()
+        conn.close()
+        return True, new_end.strftime("%Y-%m-%d %H:%M:%S")
+
+    # нет активной — копим
+    cursor.execute(
+        "UPDATE users SET bonus_days = COALESCE(bonus_days, 0) + ? WHERE telegram_id = ?",
+        (days, telegram_id),
+    )
+    conn.commit()
+    conn.close()
+    return True, "stored_bonus"
+
+
+def was_referral_rewarded(buyer_tg: int, payment_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT 1 FROM referral_rewards WHERE buyer_tg = ? AND payment_id = ?",
+        (buyer_tg, payment_id),
+    )
+    ok = cursor.fetchone() is not None
+    conn.close()
+    return ok
+
+
+def record_referral_reward(referrer_tg: int, buyer_tg: int, days: int, payment_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO referral_rewards (referrer_tg, buyer_tg, days, payment_id, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                referrer_tg,
+                buyer_tg,
+                days,
+                payment_id,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.close()
+        return False
+
+
+def grant_referral_bonus_for_payment(buyer_tg: int, payment_id: int, days: int = 3) -> dict:
+    """
+    Если buyer пришёл по рефералке — начислить referrer +days.
+    Один payment_id / buyer — один раз.
+    """
+    result = {"granted": False, "referrer": None, "new_end": None, "reason": ""}
+    referrer = get_referred_by(buyer_tg)
+    if not referrer:
+        result["reason"] = "no_referrer"
+        return result
+    if was_referral_rewarded(buyer_tg, payment_id):
+        result["reason"] = "already"
+        result["referrer"] = referrer
+        return result
+    if not record_referral_reward(referrer, buyer_tg, days, payment_id):
+        result["reason"] = "duplicate"
+        result["referrer"] = referrer
+        return result
+    ok, info = extend_active_subscription_days(referrer, days)
+    result["granted"] = ok
+    result["referrer"] = referrer
+    result["new_end"] = info
+    result["reason"] = "ok" if ok else "extend_failed"
+    return result
+
+def get_referral_reward_by_payment(payment_id: int):
+    """(referrer_tg, buyer_tg, days, created_at) or None"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT referrer_tg, buyer_tg, days, created_at
+        FROM referral_rewards
+        WHERE payment_id = ?
+        ORDER BY id DESC LIMIT 1
+        """,
+        (payment_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row

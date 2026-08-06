@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from datetime import datetime
 from aiogram.filters import CommandStart
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ChatMemberStatus
 from aiogram.fsm.context import FSMContext
 
@@ -20,6 +20,7 @@ from keyboards import (
     renewal_period_keyboard,
     change_tariff_keyboard,
     devices_keyboard,
+    referral_keyboard,
     platform_ios_keyboard,
     platform_android_keyboard,
     platform_windows_keyboard,
@@ -76,9 +77,20 @@ from database import (
     get_plan_by_period,
     create_subscription,
     get_user_subscription,
-    get_profile
+    get_profile,
+    get_referral_code,
+    get_user_by_referral_code,
+    set_referred_by,
+    count_referrals,
+    get_promo,
+    apply_promo_use,
+    count_device_slots,
+    list_device_slots,
+    add_device_slot,
+    remove_device_slot,
+    get_referral_reward_by_payment,
 )
-from states import SubscriptionState, RenewalState, ChangeTariffState
+from states import SubscriptionState, RenewalState, ChangeTariffState, DeviceState, PromoUserState
 from services import (
     subscription_status_text,
     create_order,
@@ -116,11 +128,28 @@ async def is_user_subscribed(bot, user_id: int) -> bool:
 
 @router.message(CommandStart())
 async def start(message: Message):
+    referred_by = None
+    if message.text and " " in message.text:
+        payload = message.text.split(maxsplit=1)[1].strip().upper()
+        ref = get_user_by_referral_code(payload)
+        if ref:
+            referred_by = ref[0]
+
     add_user(
         telegram_id=message.from_user.id,
         username=message.from_user.username,
-        first_name=message.from_user.first_name
+        first_name=message.from_user.first_name,
+        referred_by=None,
     )
+    if referred_by and set_referred_by(message.from_user.id, referred_by):
+        try:
+            await message.bot.send_message(
+                referred_by,
+                f"🎉 По вашей ссылке зарегистрировался "
+                f"{message.from_user.first_name or 'новый пользователь'}!",
+            )
+        except Exception:
+            pass
 
     # Проверка подписки на канал
     if not await is_user_subscribed(message.bot, message.from_user.id):
@@ -762,6 +791,8 @@ async def change_tariff_period_chosen(message: Message, state: FSMContext):
 # ======================
 # УСТРОЙСТВА
 # ======================
+# УСТРОЙСТВА
+# ======================
 
 @router.message(F.text == "⚙️ Устройства")
 async def devices(message: Message):
@@ -777,27 +808,126 @@ async def devices(message: Message):
         return
 
     plan = profile[3]
-    devices_used = profile[9] or 0
-
     max_devices = {"Start": 2, "Plus": 5, "Pro": 10}
     limit = max_devices.get(plan, 0)
+    slots = list_device_slots(message.from_user.id)
+    used = len(slots)
 
+    lines_out = [f"⚙️ <b>Устройства</b> · тариф <b>{plan}</b>\n"]
+    lines_out.append(f"Слотов: <b>{used} / {limit}</b>\n")
+    if slots:
+        lines_out.append("Ваши устройства:")
+        for sid, label, created in slots:
+            lines_out.append(f"• {label} <i>(#{sid})</i>")
+    else:
+        lines_out.append("Пока нет добавленных устройств.")
+    lines_out.append(
+        "\nУчёт слотов по тарифу. Один конфиг можно поставить "
+        "на несколько устройств в пределах лимита."
+    )
     await message.answer(
-        f"⚙️ Устройства\n\n"
-        f"Ваши устройства:\n\n"
-        f"Использовано:\n"
-        f"{devices_used} / {limit} устройств\n\n"
-        f"Вы можете подключать VPN на нескольких устройствах одновременно "
-        f"в рамках вашего тарифа.",
-        reply_markup=devices_keyboard()
+        "\n".join(lines_out),
+        reply_markup=devices_keyboard(),
     )
 
 
-@router.message(F.text == "⬅️ К выбору платформы")
-async def back_to_guide(message: Message):
+@router.message(F.text == "➕ Добавить устройство")
+async def device_add(message: Message, state: FSMContext):
+    profile = get_profile(message.from_user.id)
+    if not profile or not profile[3]:
+        await message.answer("Нужна активная подписка.")
+        return
+    await state.set_state(DeviceState.waiting_label)
+    await message.answer("Как назвать устройство? (например: iPhone, Ноутбук)")
+
+
+@router.message(DeviceState.waiting_label)
+async def device_label_save(message: Message, state: FSMContext):
+    profile = get_profile(message.from_user.id)
+    if not profile or not profile[3]:
+        await state.clear()
+        return
+    plan = profile[3]
+    max_devices = {"Start": 2, "Plus": 5, "Pro": 10}
+    limit = max_devices.get(plan, 0)
+    label = (message.text or "Устройство").strip()
+    ok, err = add_device_slot(message.from_user.id, label, limit)
+    await state.clear()
+    if not ok:
+        await message.answer(f"❌ {err}", reply_markup=devices_keyboard())
+        return
+    await message.answer(f"✅ Добавлено: <b>{label}</b>", reply_markup=devices_keyboard())
+
+
+@router.message(F.text == "🗑 Удалить устройство")
+async def device_del_hint(message: Message):
+    slots = list_device_slots(message.from_user.id)
+    if not slots:
+        await message.answer("Нечего удалять.")
+        return
+    rows = [
+        [InlineKeyboardButton(text=f"🗑 {label}", callback_data=f"devdel:{sid}")]
+        for sid, label, _ in slots
+    ]
     await message.answer(
-        GUIDE_TEXT,
-        reply_markup=guide_keyboard()
+        "Выберите устройство для удаления:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(F.data.startswith("devdel:"))
+async def device_del_cb(callback: CallbackQuery):
+    sid = int(callback.data.split(":")[1])
+    if remove_device_slot(sid, callback.from_user.id):
+        await callback.answer("Удалено")
+        await callback.message.edit_text("✅ Устройство удалено")
+    else:
+        await callback.answer("Не найдено", show_alert=True)
+
+
+@router.message(F.text == "🎁 Рефералка / промо")
+async def referral_menu(message: Message):
+    code = get_referral_code(message.from_user.id)
+    n = count_referrals(message.from_user.id)
+    bot_info = await message.bot.get_me()
+    link = f"https://t.me/{bot_info.username}?start={code}"
+    nl = chr(10)
+    msg = (
+        "🎁 <b>Реферальная программа</b>" + nl + nl
+        + f"Ваш код: <code>{code}</code>" + nl
+        + "Ссылка:" + nl + f"<code>{link}</code>" + nl + nl
+        + f"Приглашено: <b>{n}</b>" + nl + nl
+        + "Когда друг <b>оплатит</b> подписку — вам начислят "
+        + "<b>+3 дня</b> к вашей подписке." + nl + nl
+        + "Промокоды — кнопкой ниже."
+    )
+    await message.answer(msg, reply_markup=referral_keyboard())
+
+
+@router.message(F.text == "🎟 Ввести промокод")
+async def promo_user_start(message: Message, state: FSMContext):
+    await state.set_state(PromoUserState.waiting_code)
+    await message.answer("Введите промокод:")
+
+
+@router.message(PromoUserState.waiting_code)
+async def promo_user_apply(message: Message, state: FSMContext):
+    code = (message.text or "").strip().upper()
+    promo = get_promo(code)
+    await state.clear()
+    if not promo or not promo[6]:
+        await message.answer("❌ Промокод не найден или неактивен.")
+        return
+    if promo[4] and promo[5] >= promo[4]:
+        await message.answer("❌ Лимит использований исчерпан.")
+        return
+    if not apply_promo_use(promo[0], message.from_user.id):
+        await message.answer("❌ Вы уже использовали этот промокод.")
+        return
+    await message.answer(
+        f"✅ Промокод <code>{promo[1]}</code> принят!\n"
+        f"Скидка: {promo[2]}%\n"
+        f"Бонусные дни: {promo[3]}"
     )
 
 
@@ -872,6 +1002,20 @@ async def pay_button(callback: CallbackQuery):
 async def payment_check_callback(callback: CallbackQuery):
     await callback.answer()
     result = await check_platega_payment(callback.from_user.id)
+    if result.get("status") == "paid":
+        try:
+            from database import get_last_payment
+            pay = get_last_payment(callback.from_user.id)
+            if pay:
+                rew = get_referral_reward_by_payment(pay[0])
+                if rew:
+                    await callback.bot.send_message(
+                        rew[0],
+                        "🎁 <b>Реферальный бонус!</b>\n\n"
+                        "Ваш друг оплатил подписку. Вам <b>+3 дня</b>.",
+                    )
+        except Exception as e:
+            print("referral notify", e)
     await callback.message.answer(
         result["message"],
         reply_markup=payment_keyboard(),

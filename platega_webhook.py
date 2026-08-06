@@ -29,6 +29,18 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("platega.webhook")
 
+try:
+    from services import payment_success, payment_failed
+except Exception:  # pragma: no cover
+    payment_success = None  # type: ignore
+    payment_failed = None  # type: ignore
+
+try:
+    from database import grant_referral_bonus_for_payment, get_referral_reward_by_payment
+except Exception:
+    grant_referral_bonus_for_payment = None  # type: ignore
+
+
 router = APIRouter(prefix="/platega", tags=["platega"])
 
 PLATEGA_MERCHANT_ID = os.getenv("PLATEGA_MERCHANT_ID", "")
@@ -236,6 +248,33 @@ async def platega_webhook(
                     content={"ok": True, "warning": "no_telegram_id"},
                 )
 
+            # Активация подписки в БД бота + реферальный бонус
+            if payment_success and payment_id:
+                try:
+                    payment_success(int(payment_id), provider_payment_id=transaction_id)
+                except Exception as e:
+                    logger.exception("payment_success failed: %s", e)
+
+            # Уведомление рефереру о +3 днях (начисление уже в payment_success)
+            try:
+                if payment_id:
+                    reward = None
+                    try:
+                        from database import get_referral_reward_by_payment
+                        reward = get_referral_reward_by_payment(int(payment_id))
+                    except Exception:
+                        reward = None
+                    if reward:
+                        referrer_tg = int(reward[0])
+                        await _notify_user(
+                            referrer_tg,
+                            "🎁 <b>Реферальный бонус!</b>\n\n"
+                            "Ваш друг оплатил подписку VELORA.\n"
+                            "Вам начислено <b>+3 дня</b> к подписке.",
+                        )
+            except Exception as e:
+                logger.exception("referral notify: %s", e)
+
             vpn_url = await _issue_vpn(telegram_id, plan=plan, period=period)
 
             if vpn_url:
@@ -267,6 +306,11 @@ async def platega_webhook(
             )
 
         elif status == "canceled":
+            if payment_failed and payment_id:
+                try:
+                    payment_failed(int(payment_id))
+                except Exception as e:
+                    logger.exception("payment_failed: %s", e)
             if telegram_id:
                 await _notify_user(
                     telegram_id,
