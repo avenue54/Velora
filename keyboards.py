@@ -1,3 +1,4 @@
+from config import CHANNEL_LINK
 from aiogram.types import *
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -16,6 +17,15 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+
+
+
+def main_menu_news_keyboard() -> InlineKeyboardMarkup:
+    """Inline-кнопка под сообщением: канал VELORA News."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📰 VELORA News", url=CHANNEL_LINK)
+    builder.adjust(1)
+    return builder.as_markup()
 
 def main_menu_reply_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(

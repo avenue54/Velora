@@ -1,3 +1,4 @@
+import random
 from aiogram import Router, F
 from datetime import datetime
 from aiogram.filters import CommandStart
@@ -7,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 
 from keyboards import (
     main_menu_reply_keyboard,
+    main_menu_news_keyboard,
     tariffs_reply_keyboard,
     after_price_keyboard,
     connect_keyboard,
@@ -47,6 +49,7 @@ from texts import (
     SUPPORT_TEXT,
     SETTINGS_TEXT,
     MAIN_MENU_TEXT,
+    MAIN_MENU_TEXTS,
     ABOUT_VPN_TEXT,
     ABOUT_VELORA_TEXT,
     WHAT_IS_VPN_TEXT,
@@ -1169,8 +1172,44 @@ async def back_to_tariffs(message: Message):
 
 
 @router.message(F.text == "🏠 Главное меню")
-async def main_menu(message: Message):
+async def main_menu(message: Message, state: FSMContext):
+    await state.clear()
+    text = random.choice(MAIN_MENU_TEXTS)
+    profile = get_profile(message.from_user.id)
+    if profile and profile[3] and profile[6] == "active":
+        plan = profile[3]
+        end_date = profile[8]
+        days_part = ""
+        if end_date:
+            try:
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
+                days = max(0, (end_dt - datetime.now()).days)
+                days_part = f" · ещё <b>{days}</b> дн."
+            except Exception:
+                days_part = ""
+        text = (
+            text
+            + chr(10)
+            + chr(10)
+            + f"Статус: <b>{plan}</b> · активна{days_part}"
+        )
+
+    # Одно сообщение: текст + inline «VELORA News» под ним
     await message.answer(
-        MAIN_MENU_TEXT,
-        reply_markup=main_menu_reply_keyboard()
+        text,
+        reply_markup=main_menu_news_keyboard(),
     )
+    # Обновить нижнюю reply-клавиатуру без второго видимого сообщения
+    try:
+        kb_msg = await message.answer(
+            "\u200b",
+            reply_markup=main_menu_reply_keyboard(),
+        )
+        await kb_msg.delete()
+    except Exception:
+        await message.answer(
+            "·",
+            reply_markup=main_menu_reply_keyboard(),
+        )
+
+
