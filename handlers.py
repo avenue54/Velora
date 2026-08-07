@@ -1194,10 +1194,15 @@ async def main_menu(message: Message, state: FSMContext):
             + f"Статус: <b>{plan}</b> активна{days_part}"
         )
 
-    await message.answer(
-        text,
-        reply_markup=main_menu_news_keyboard(),
+    text = (
+        text
+        + chr(10)
+        + chr(10)
+        + f'<a href="{CHANNEL_LINK}">📰 VELORA News</a>'
     )
 
-
-
+    # Одно сообщение: текст + возврат кнопок главного меню
+    await message.answer(
+        text,
+        reply_markup=main_menu_reply_keyboard(),
+    )
