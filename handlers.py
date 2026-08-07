@@ -300,7 +300,8 @@ async def my_profile(message: Message):
             days = 0
         expiry_str = end.strftime("%d.%m.%y в %H:%M МСК")
 
-    if not plan:
+    active_now = is_user_subscription_active(message.from_user.id)
+    if not plan or not active_now:
         await message.answer(
             "👤 Профиль VELORA\n\n"
             f"🆔 Telegram ID:\n"
@@ -314,7 +315,7 @@ async def my_profile(message: Message):
         )
         return
 
-    expiry_line = f"\nИстекает {expiry_str}" if status == "active" and expiry_str else ""
+    expiry_line = f"\nИстекает {expiry_str}" if expiry_str else ""
 
     await message.answer(
         "👤 Профиль VELORA\n\n"

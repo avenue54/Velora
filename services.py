@@ -16,10 +16,8 @@ from database import (
     create_subscription,
     activate_subscription as db_activate_subscription,
     get_connection,
-    grant_referral_bonus_for_payment,  
+    grant_referral_bonus_for_payment,
 )
-
-
 from platega import (
     PlategaError,
     parse_amount_rub,
@@ -38,6 +36,8 @@ def subscription_status_text(status: str) -> str:
         return "🟡 Ожидает подтверждения"
     if status == "rejected":
         return "🔴 Не оплачена"
+    if status == "expired":
+        return "🔴 Истекла"
     return "⚪ Неизвестно"
 
 
