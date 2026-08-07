@@ -1184,32 +1184,20 @@ async def main_menu(message: Message, state: FSMContext):
             try:
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
                 days = max(0, (end_dt - datetime.now()).days)
-                days_part = f" · ещё <b>{days}</b> дн."
+                days_part = f" ещё <b>{days}</b> дн."
             except Exception:
                 days_part = ""
         text = (
             text
             + chr(10)
             + chr(10)
-            + f"Статус: <b>{plan}</b> · активна{days_part}"
+            + f"Статус: <b>{plan}</b> активна{days_part}"
         )
 
-    # Одно сообщение: текст + inline «VELORA News» под ним
     await message.answer(
         text,
         reply_markup=main_menu_news_keyboard(),
     )
-    # Обновить нижнюю reply-клавиатуру без второго видимого сообщения
-    try:
-        kb_msg = await message.answer(
-            "\u200b",
-            reply_markup=main_menu_reply_keyboard(),
-        )
-        await kb_msg.delete()
-    except Exception:
-        await message.answer(
-            "·",
-            reply_markup=main_menu_reply_keyboard(),
-        )
+
 
 
