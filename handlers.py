@@ -1,6 +1,6 @@
 import random
 from aiogram import Router, F
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ChatMemberStatus
@@ -114,6 +114,19 @@ from platega import PlategaError
 from database import get_last_payment
 from api import create_vpn_subscription, VeloraAPIError
 from config import CHANNEL_USERNAME, CHANNEL_LINK
+
+
+def _fmt_end_msk(end_date: str) -> str:
+    """end_date from DB (UTC naive) → display in Moscow time."""
+    if not end_date:
+        return ""
+    try:
+        end = datetime.strptime(str(end_date)[:19], "%Y-%m-%d %H:%M:%S")
+        end = end.replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=3)))
+        return end.strftime("%d.%m.%y в %H:%M МСК")
+    except Exception:
+        return str(end_date)[:16]
+
 
 router = Router()
 
@@ -295,10 +308,10 @@ async def my_profile(message: Message):
 
     if end_date:
         end = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
-        days = (end - datetime.now()).days
+        days = (end - datetime.utcnow()).days
         if days < 0:
             days = 0
-        expiry_str = end.strftime("%d.%m.%y в %H:%M МСК")
+        expiry_str = _fmt_end_msk(end_date)
 
     active_now = is_user_subscription_active(message.from_user.id)
     if not plan or not active_now:
