@@ -802,9 +802,10 @@ async def renewal_period_chosen(message: Message, state: FSMContext):
 
 @router.message(F.text == "💳 Изменить тариф")
 async def change_tariff(message: Message, state: FSMContext):
+    expire_outdated_subscriptions()
     profile = get_profile(message.from_user.id)
 
-    if not profile or not profile[3]:
+    if not profile or not profile[3] or not is_user_subscription_active(message.from_user.id):
         await message.answer(
             "❌ У вас нет активной подписки.\n\n"
             "Перейдите в раздел 💳 Тарифы для оформления.",
