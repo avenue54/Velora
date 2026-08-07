@@ -134,6 +134,10 @@ def create_database():
         cursor.execute("ALTER TABLE users ADD COLUMN bonus_days INTEGER DEFAULT 0")
     except Exception:
         pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN trial_granted INTEGER DEFAULT 0")
+    except Exception:
+        pass
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS promo_codes (
@@ -1354,3 +1358,78 @@ def get_referral_reward_by_payment(payment_id: int):
     row = cursor.fetchone()
     conn.close()
     return row
+
+
+def has_trial_been_granted(telegram_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COALESCE(trial_granted, 0) FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return bool(row and row[0])
+
+
+def has_active_subscription(telegram_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT 1
+        FROM subscriptions
+        JOIN users ON subscriptions.user_id = users.id
+        WHERE users.telegram_id = ?
+          AND subscriptions.status = 'active'
+          AND (subscriptions.end_date IS NULL
+               OR subscriptions.end_date > datetime('now'))
+        LIMIT 1
+        """,
+        (telegram_id,),
+    )
+    ok = cursor.fetchone() is not None
+    conn.close()
+    return ok
+
+
+def grant_trial_subscription(telegram_id: int, days: int = 3) -> tuple[bool, str]:
+    """
+    Одноразовая пробная подписка тарифа Start на days дней.
+    Returns (ok, message_or_end_date).
+    """
+    if has_trial_been_granted(telegram_id):
+        return False, "already"
+    if has_active_subscription(telegram_id):
+        return False, "has_active"
+
+    user_id = get_user_id(telegram_id)
+    if not user_id:
+        return False, "no_user"
+
+    start = datetime.now()
+    end = start + timedelta(days=days)
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO subscriptions
+        (user_id, plan, period, price, status, start_date, end_date, devices_used)
+        VALUES (?, ?, ?, ?, 'active', ?, ?, 0)
+        """,
+        (
+            user_id,
+            "Start",
+            f"{days} дня",
+            "0 ₽",
+            start.strftime("%Y-%m-%d %H:%M:%S"),
+            end.strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+    cursor.execute(
+        "UPDATE users SET trial_granted = 1 WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    conn.commit()
+    conn.close()
+    return True, end.strftime("%d.%m.%Y %H:%M")
