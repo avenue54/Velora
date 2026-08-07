@@ -1068,11 +1068,28 @@ async def promo_user_apply(message: Message, state: FSMContext):
 
     ok, info = extend_active_subscription_days(message.from_user.id, bonus_days)
     nl = chr(10)
+
+    # синхрон срока на API (Happ /sub)
+    if ok and info and info != "stored_bonus":
+        try:
+            profile = get_profile(message.from_user.id)
+            plan = (profile[3] if profile else None) or "Start"
+            period = (profile[4] if profile else None) or ""
+            await create_vpn_subscription(
+                telegram_id=message.from_user.id,
+                plan=plan,
+                period=period,
+                end_date=info,
+            )
+        except Exception as e:
+            print(f"promo API sync fail: {e}")
+
     if ok and info != "stored_bonus":
+        end_show = _fmt_end_msk(info) if info else info
         await message.answer(
             f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
             + f"Вам начислено <b>+{bonus_days} дн.</b> к подписке." + nl
-            + f"Новая дата окончания: <b>{info}</b>"
+            + f"Новая дата окончания: <b>{end_show}</b>"
         )
     elif ok:
         await message.answer(
