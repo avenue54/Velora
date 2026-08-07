@@ -434,10 +434,16 @@ def activate_subscription(subscription_id):
     period = data[0]
     start_date = datetime.now()
 
-    if "1 месяц" in period:
-        end_date = start_date + timedelta(days=30)
-    elif "3 месяца" in period:
+    period_l = (period or "").lower()
+    if "3 месяца" in period_l:
         end_date = start_date + timedelta(days=90)
+    elif "1 месяц" in period_l:
+        end_date = start_date + timedelta(days=30)
+    elif any(x in period_l for x in ("день", "дня", "дней")):
+        import re
+        m = re.search(r"(\d+)", period or "")
+        days = int(m.group(1)) if m else 3
+        end_date = start_date + timedelta(days=days)
     else:
         end_date = start_date + timedelta(days=30)
 
@@ -1433,3 +1439,46 @@ def grant_trial_subscription(telegram_id: int, days: int = 3) -> tuple[bool, str
     conn.commit()
     conn.close()
     return True, end.strftime("%d.%m.%Y %H:%M")
+
+
+def expire_outdated_subscriptions() -> int:
+    """Пометить active → expired, если end_date уже прошла. Returns count."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE subscriptions
+        SET status = 'expired'
+        WHERE status = 'active'
+          AND end_date IS NOT NULL
+          AND end_date < datetime('now', 'localtime')
+        """
+    )
+    n = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return n
+
+
+def is_user_subscription_active(telegram_id: int) -> bool:
+    """Есть ли действующая подписка (status=active и срок не вышел)."""
+    expire_outdated_subscriptions()
+    profile = get_profile(telegram_id)
+    if not profile or profile[6] != "active":
+        return False
+    end_date = profile[8]
+    if end_date:
+        try:
+            if datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S") < datetime.now():
+                return False
+        except Exception:
+            pass
+    return True
+
+
+def get_user_subscription_end_date(telegram_id: int) -> str | None:
+    """end_date активной подписки или None."""
+    if not is_user_subscription_active(telegram_id):
+        return None
+    profile = get_profile(telegram_id)
+    return profile[8] if profile else None

@@ -97,6 +97,9 @@ from database import (
     get_referral_reward_by_payment,
     extend_active_subscription_days,
     grant_trial_subscription,
+    is_user_subscription_active,
+    expire_outdated_subscriptions,
+    get_user_subscription_end_date,
     has_trial_been_granted,
 )
 from states import SubscriptionState, RenewalState, ChangeTariffState, DeviceState, PromoUserState
@@ -159,6 +162,7 @@ async def _send_trial_if_needed(
 
 @router.message(CommandStart())
 async def start(message: Message):
+    expire_outdated_subscriptions()
     referred_by = None
     if message.text and " " in message.text:
         payload = message.text.split(maxsplit=1)[1].strip().upper()
@@ -239,8 +243,8 @@ async def check_subscription(callback: CallbackQuery):
 
 @router.message(F.text == "🚀 Подключиться")
 async def connect(message: Message):
-    profile = get_profile(message.from_user.id)
-    has_active = bool(profile and profile[3] and profile[6] == "active")
+    expire_outdated_subscriptions()
+    has_active = is_user_subscription_active(message.from_user.id)
     if has_active:
         await _issue_config_with_device(message)
         return
@@ -260,7 +264,7 @@ async def choose_tariff(message: Message):
 
 @router.message(F.text == "👤 Мой аккаунт")
 async def my_profile(message: Message):
-
+    expire_outdated_subscriptions()
     profile = get_profile(
         message.from_user.id
     )
@@ -381,8 +385,9 @@ async def guide_macos(message: Message):
 
 async def _issue_config_with_device(message: Message) -> None:
     """Подключение: +1 слот устройства → выдача ссылки."""
+    expire_outdated_subscriptions()
     profile = get_profile(message.from_user.id)
-    has_active = bool(profile and profile[3] and profile[6] == "active")
+    has_active = is_user_subscription_active(message.from_user.id)
     nl = chr(10)
 
     if not has_active:
@@ -414,10 +419,12 @@ async def _issue_config_with_device(message: Message) -> None:
         return
 
     try:
+        end_date = get_user_subscription_end_date(message.from_user.id)
         data = await create_vpn_subscription(
             telegram_id=message.from_user.id,
             plan=plan,
             period=period,
+            end_date=end_date,
         )
         url = data["url"]
         await message.answer(
@@ -878,8 +885,9 @@ async def change_tariff_period_chosen(message: Message, state: FSMContext):
 
 def _devices_text(telegram_id: int) -> tuple[str, bool]:
     """Текст экрана устройств. Returns (text, has_active_sub)."""
+    expire_outdated_subscriptions()
     profile = get_profile(telegram_id)
-    if not profile or not profile[3]:
+    if not profile or not profile[3] or not is_user_subscription_active(telegram_id):
         nl = chr(10)
         return (
             "⚙️ <b>Устройства</b>" + nl + nl
@@ -1174,9 +1182,10 @@ async def back_to_tariffs(message: Message):
 @router.message(F.text == "🏠 Главное меню")
 async def main_menu(message: Message, state: FSMContext):
     await state.clear()
+    expire_outdated_subscriptions()
     text = random.choice(MAIN_MENU_TEXTS)
     profile = get_profile(message.from_user.id)
-    if profile and profile[3] and profile[6] == "active":
+    if profile and profile[3] and is_user_subscription_active(message.from_user.id):
         plan = profile[3]
         end_date = profile[8]
         days_part = ""
