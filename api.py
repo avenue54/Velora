@@ -100,3 +100,42 @@ async def revoke_vpn_subscription(telegram_id: int) -> bool:
     except Exception as e:
         logger.warning("revoke-sub fail: %s", e)
         return False
+
+
+def sync_end_date_to_api(
+    telegram_id: int,
+    end_date: str,
+    plan: str = "Start",
+    period: str = "",
+) -> bool:
+    """Синхронно обновить expire_date на API (для payment/promo/referral)."""
+    import json
+    import urllib.request
+    import urllib.error
+
+    if not API_KEY or not end_date:
+        return False
+    payload = json.dumps(
+        {
+            "telegram_id": int(telegram_id),
+            "plan": plan or "Start",
+            "period": period or None,
+            "end_date": end_date,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{API_URL}/internal/create-sub",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-API-Key": API_KEY,
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return 200 <= r.status < 300
+    except Exception as e:
+        logger.warning("sync_end_date_to_api fail: %s", e)
+        return False

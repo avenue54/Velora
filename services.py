@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from api import sync_end_date_to_api
 from database import (
     create_payment,
     get_payment,
@@ -281,7 +282,14 @@ def payment_success(payment_id: int, provider_payment_id=None) -> bool:
                 bonus.get("referrer"),
                 bonus.get("new_end"),
             )
-            # сохраним в «глобальный» атрибут для уведомления из handlers/webhook
+            # синхрон срока реферера на API
+            ref = bonus.get("referrer")
+            new_end = bonus.get("new_end")
+            if ref and new_end and new_end != "stored_bonus":
+                try:
+                    sync_end_date_to_api(int(ref), str(new_end))
+                except Exception as e:
+                    logger.warning("referral API sync fail: %s", e)
             payment_success.last_referral_bonus = bonus  # type: ignore
         else:
             payment_success.last_referral_bonus = bonus  # type: ignore
