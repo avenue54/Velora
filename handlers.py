@@ -34,6 +34,7 @@ from keyboards import (
 )
 from texts import (
     WELCOME_TEXT,
+    TRIAL_TEXT,
     CONNECT_TEXT,
     ACCOUNT_TEXT,
     SERVERS_TEXT,
@@ -92,6 +93,8 @@ from database import (
     get_device_limit,
     get_referral_reward_by_payment,
     extend_active_subscription_days,
+    grant_trial_subscription,
+    has_trial_been_granted,
 )
 from states import SubscriptionState, RenewalState, ChangeTariffState, DeviceState, PromoUserState
 from services import (
@@ -124,6 +127,28 @@ async def is_user_subscribed(bot, user_id: int) -> bool:
     except Exception:
         return False
 
+
+
+async def _send_trial_if_needed(
+    message: Message,
+    telegram_id: int | None = None,
+    *,
+    bot=None,
+) -> None:
+    """Пробная Start на 3 дня — только после подписки на канал, один раз."""
+    tg_id = telegram_id or message.from_user.id
+    check_bot = bot or message.bot
+    # Обязательная проверка канала перед выдачей trial
+    if not await is_user_subscribed(check_bot, tg_id):
+        return
+    ok, info = grant_trial_subscription(tg_id, days=3)
+    if not ok:
+        return
+    from keyboards import get_config_keyboard
+    await message.answer(
+        TRIAL_TEXT + chr(10) + chr(10) + f"📅 До: <b>{info}</b>",
+        reply_markup=get_config_keyboard(),
+    )
 
 # ======================
 # START
@@ -169,11 +194,12 @@ async def start(message: Message):
         )
         return
 
-    # Если уже подписан
+    # Уже подписан на канал → приветствие, затем пробник
     await message.answer(
         WELCOME_TEXT,
         reply_markup=main_menu_reply_keyboard()
     )
+    await _send_trial_if_needed(message, telegram_id=message.from_user.id, bot=message.bot)
 
 
 @router.callback_query(F.data == "check_sub")
@@ -186,9 +212,15 @@ async def check_subscription(callback: CallbackQuery):
         except Exception:
             pass
 
+        # Сначала приветствие, пробник — только после подтверждённой подписки на канал
         await callback.message.answer(
             WELCOME_TEXT,
             reply_markup=main_menu_reply_keyboard()
+        )
+        await _send_trial_if_needed(
+            callback.message,
+            telegram_id=callback.from_user.id,
+            bot=callback.bot,
         )
         await callback.answer("✅ Подписка подтверждена!")
     else:
