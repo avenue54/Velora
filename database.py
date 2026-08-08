@@ -1145,6 +1145,43 @@ def deactivate_promo(code: str) -> None:
     )
     conn.commit()
     conn.close()
+    
+def get_promo_usage_stats():
+    """Список: (code, used_count, active) по всем промо."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT code, used_count, active
+        FROM promo_codes
+        ORDER BY used_count DESC, id DESC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def get_promo_users(code: str):
+    """
+    Кто использовал промокод.
+    Returns list of (telegram_id, used_at) or empty list.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT pu.telegram_id, pu.used_at
+        FROM promo_uses pu
+        JOIN promo_codes pc ON pc.id = pu.promo_id
+        WHERE pc.code = ?
+        ORDER BY pu.used_at DESC
+        """,
+        (code.strip().upper(),),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
 
 # =========================

@@ -21,6 +21,8 @@ from database import (
     list_promo_codes,
     deactivate_promo,
     admin_get,
+    get_promo_usage_stats,
+    get_promo_users,
 )
 from keyboard_admin import (
     admin_main_keyboard,
@@ -231,7 +233,6 @@ async def statistics(message: Message):
         return
 
     stats = get_statistics()
-    # stats: users, subscriptions, active, pending — depends on implementation
     if isinstance(stats, dict):
         text = STATISTICS_TEXT.format(
             users=stats.get("users", 0),
@@ -261,14 +262,58 @@ async def promo_menu(message: Message, state: FSMContext):
         text += "Пока нет промокодов.\n"
     else:
         for r in rows[:20]:
-            # id, code, discount, bonus_days, max_uses, used, active
+            # id, code, discount, bonus_days, max_uses, used, active, expires
             status = "🟢" if r[6] else "🔴"
             text += (
                 f"{status} <code>{r[1]}</code> — +{r[3]} дн. "
                 f"до {r[7] or '∞'} ({r[5]} исп.)\n"
             )
-    text += "\nСоздать: /new_promo\nОтключить: /promo_off КОД"
+    text += (
+        "\nСоздать: /new_promo\n"
+        "Статистика: /promo_stats\n"
+        "Кто использовал: /promo_stats КОД\n"
+        "Отключить: /promo_off КОД"
+    )
     await message.answer(text)
+
+
+@router.message(Command("promo_stats"))
+async def promo_stats(message: Message):
+    if not _require_admin(message):
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+
+    # /promo_stats  — сводка по всем
+    if len(parts) == 1:
+        rows = get_promo_usage_stats()
+        if not rows:
+            await message.answer("Пока нет промокодов.")
+            return
+        lines = ["📊 <b>Использование промокодов</b>\n"]
+        for code, used, active in rows:
+            mark = "🟢" if active else "🔴"
+            lines.append(f"{mark} <code>{code}</code> — <b>{used}</b> чел.")
+        lines.append("\nДетали по коду:\n<code>/promo_stats КОД</code>")
+        await message.answer("\n".join(lines))
+        return
+
+    # /promo_stats CODE — кто использовал
+    code = parts[1].strip().upper()
+    users = get_promo_users(code)
+    if not users:
+        await message.answer(
+            f"По коду <code>{code}</code> использований нет "
+            f"(или такого промокода нет).",
+        )
+        return
+
+    lines = [f"👥 <b>{code}</b> — {len(users)} чел.\n"]
+    for tg_id, used_at in users[:50]:
+        lines.append(f"• <code>{tg_id}</code> — {used_at}")
+    if len(users) > 50:
+        lines.append(f"\n…и ещё {len(users) - 50}")
+    await message.answer("\n".join(lines))
 
 
 @router.message(Command("new_promo"))
