@@ -43,9 +43,8 @@ ACCOUNT_TEXT = (
 
 SERVERS_TEXT = (
     "🌍 Серверы VELORA\n\n"
-    "🇩🇪 Germany №1\n"
-    "🟢 Онлайн\n\n"
-    
+    "🇩🇪 Germany №1 🟢 Онлайн\n\n"
+
     "🇩🇪 Germany №2\n"
     "🟢 Онлайн\n\n"
     
