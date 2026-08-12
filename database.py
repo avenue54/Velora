@@ -1181,10 +1181,9 @@ def get_active_subscription(telegram_id: int):
 
 
 def promo_extend_current(telegram_id: int, promo_row) -> tuple[bool, str]:
-    """Cancel current subscription and create new one with promo plan and days."""
+    """Add promo bonus_days to existing active subscription without changing plan."""
     days = int(promo_row[3] or 0)
     promo_id = promo_row[0]
-    plan = promo_row[8] if len(promo_row) > 8 else "Plus"
     user_id = get_user_id(telegram_id)
     if not user_id:
         return False, "Пользователь не найден."
@@ -1193,28 +1192,20 @@ def promo_extend_current(telegram_id: int, promo_row) -> tuple[bool, str]:
     if not active:
         return False, "Нет активной подписки."
 
-    sub_id, _, _ = active
+    sub_id, _, end_date = active
     now = datetime.now()
-    new_end = now + timedelta(days=days)
+    try:
+        base = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S") if end_date else now
+    except Exception:
+        base = now
+    new_end = base + timedelta(days=days)
 
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE subscriptions SET status = 'cancelled' WHERE id = ?",
-            (sub_id,),
-        )
-        cursor.execute(
-            """
-            INSERT INTO subscriptions
-            (user_id, plan, period, price, status, start_date, end_date, devices_used)
-            VALUES (?, ?, ?, ?, 'active', ?, ?, 0)
-            """,
-            (
-                user_id, plan, f"{days} дн.", "0 ₽",
-                now.strftime("%Y-%m-%d %H:%M:%S"),
-                new_end.strftime("%Y-%m-%d %H:%M:%S"),
-            ),
+            "UPDATE subscriptions SET end_date = ? WHERE id = ?",
+            (new_end.strftime("%Y-%m-%d %H:%M:%S"), sub_id),
         )
         cursor.execute(
             "INSERT INTO promo_uses (promo_id, telegram_id, used_at) VALUES (?, ?, ?)",
@@ -1228,6 +1219,8 @@ def promo_extend_current(telegram_id: int, promo_row) -> tuple[bool, str]:
         conn.close()
         return True, new_end.strftime("%Y-%m-%d %H:%M:%S")
     except Exception as e:
+        conn.close()
+        return False, str(e)
         conn.close()
         return False, str(e)
 

@@ -1060,9 +1060,24 @@ async def promo_user_apply(message: Message, state: FSMContext):
     code = (message.text or "").strip().upper()
     promo = get_promo(code)
     await state.clear()
+
     ok, err = is_promo_valid(promo)
     if not ok:
         await message.answer(f"❌ {err}")
+        return
+
+    # Проверка на повторное использование
+    from database import get_connection as _gc
+    _conn = _gc()
+    _cur = _conn.cursor()
+    _cur.execute(
+        "SELECT 1 FROM promo_uses WHERE promo_id = ? AND telegram_id = ?",
+        (promo[0], message.from_user.id),
+    )
+    already = _cur.fetchone()
+    _conn.close()
+    if already:
+        await message.answer("❌ Вы уже использовали этот промокод.")
         return
 
     days = int(promo[3] or 0)
@@ -1071,39 +1086,7 @@ async def promo_user_apply(message: Message, state: FSMContext):
 
     active = get_active_subscription(message.from_user.id)
 
-    if active:
-        _, active_plan, active_end = active
-        if active_plan == plan:
-            ok, info = promo_extend_current(message.from_user.id, promo)
-            if not ok:
-                await message.answer(f"❌ {info}")
-                return
-            end_show = _fmt_end_msk(info) if info else info
-            await message.answer(
-                f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
-                + f"Тариф: <b>{plan}</b>" + nl
-                + f"+{days} дн. к подписке" + nl
-                + f"Действует до: <b>{end_show}</b>"
-            )
-        else:
-            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=f"📅 Добавить {plan} после {active_plan}",
-                    callback_data=f"promo_new:{code}"
-                )],
-                [InlineKeyboardButton(
-                    text=f"🔄 Заменить {active_plan} → {plan} (+{days} дн.)",
-                    callback_data=f"promo_extend:{code}"
-                )],
-            ])
-            await message.answer(
-                f"У вас активна подписка <b>{active_plan}</b>.\n\n"
-                f"Промокод даёт <b>{plan}</b> на <b>{days} дн.</b>\n\n"
-                "Выберите действие:",
-                reply_markup=kb
-            )
-    else:
+    if not active:
         ok, info = promo_create_new(message.from_user.id, promo)
         if not ok:
             await message.answer(f"❌ {info}")
@@ -1125,6 +1108,54 @@ async def promo_user_apply(message: Message, state: FSMContext):
             + f"Действует до: <b>{end_show}</b>" + nl + nl
             + "Получить конфигурацию: «🚀 Подключиться»"
         )
+    else:
+        _, active_plan, _ = active
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text=f"📅 Продлить {active_plan} на +{days} дн.",
+                callback_data=f"promo_extend:{code}"
+            )],
+            [InlineKeyboardButton(
+                text=f"🔄 Заменить на {plan} ({days} дн.)",
+                callback_data=f"promo_new:{code}"
+            )],
+        ])
+        await message.answer(
+            f"У вас активна подписка <b>{active_plan}</b>.\n\n"
+            f"Промокод даёт <b>{plan}</b> на <b>{days} дн.</b>\n\n"
+            "Выберите действие:",
+            reply_markup=kb
+        )
+
+
+@router.callback_query(F.data.startswith("promo_extend:"))
+async def promo_choice_extend(callback: CallbackQuery):
+    code = callback.data.split(":", 1)[1]
+    promo = get_promo(code)
+    if not promo:
+        await callback.answer("Промокод не найден.", show_alert=True)
+        return
+    days = int(promo[3] or 0)
+    active = get_active_subscription(callback.from_user.id)
+    if not active:
+        await callback.answer("Нет активной подписки.", show_alert=True)
+        return
+    _, active_plan, end_date = active
+    nl = chr(10)
+
+    ok, info = promo_extend_current(callback.from_user.id, promo)
+    await callback.message.delete()
+    if not ok:
+        await callback.message.answer(f"❌ {info}")
+        await callback.answer()
+        return
+    end_show = _fmt_end_msk(info) if info else info
+    await callback.message.answer(
+        f"✅ Подписка <b>{active_plan}</b> продлена на <b>+{days} дн.</b>!" + nl + nl
+        + f"Действует до: <b>{end_show}</b>"
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("promo_new:"))
@@ -1142,6 +1173,7 @@ async def promo_choice_new(callback: CallbackQuery):
     await callback.message.delete()
     if not ok:
         await callback.message.answer(f"❌ {info}")
+        await callback.answer()
         return
     try:
         await create_vpn_subscription(
@@ -1154,33 +1186,9 @@ async def promo_choice_new(callback: CallbackQuery):
         print(f"promo API sync fail: {e}")
     end_show = _fmt_end_msk(info) if info else info
     await callback.message.answer(
-        f"✅ Подписка <b>{plan}</b> добавлена!" + nl + nl
-        + f"Начнётся после окончания текущей." + nl
-        + f"Действует до: <b>{end_show}</b>"
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("promo_extend:"))
-async def promo_choice_extend(callback: CallbackQuery):
-    code = callback.data.split(":", 1)[1]
-    promo = get_promo(code)
-    if not promo:
-        await callback.answer("Промокод не найден.", show_alert=True)
-        return
-    days = int(promo[3] or 0)
-    plan = promo[8] if len(promo) > 8 else "Plus"
-    nl = chr(10)
-
-    ok, info = promo_extend_current(callback.from_user.id, promo)
-    await callback.message.delete()
-    if not ok:
-        await callback.message.answer(f"❌ {info}")
-        return
-    end_show = _fmt_end_msk(info) if info else info
-    await callback.message.answer(
-        f"✅ Подписка продлена на <b>{days} дн.</b> (тариф {plan})!" + nl + nl
-        + f"Действует до: <b>{end_show}</b>"
+        f"✅ Подписка заменена на <b>{plan}</b> ({days} дн.)!" + nl + nl
+        + f"Действует до: <b>{end_show}</b>" + nl + nl
+        + "Обновите конфигурацию: «🚀 Подключиться»"
     )
     await callback.answer()
 
