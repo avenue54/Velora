@@ -208,13 +208,20 @@ def create_database():
             """,
             [
                 ("Start", "Для знакомства с VELORA", 2, "1 месяц", "69 ₽"),
-                ("Start", "Для знакомства с VELORA", 2, "3 месяца", "149 ₽"),
                 ("Plus", "Популярный тариф", 5, "1 месяц", "129 ₽"),
-                ("Plus", "Популярный тариф", 5, "3 месяца", "349 ₽"),
                 ("Pro", "Максимальные возможности", 10, "1 месяц", "199 ₽"),
-                ("Pro", "Максимальные возможности", 10, "3 месяца", "499 ₽"),
             ],
         )
+    else:
+        cursor.execute("UPDATE plans SET active = 0 WHERE period = '3 месяца'")
+        cursor.execute("UPDATE plans SET price = '69 ₽' WHERE name = 'Start' AND period = '1 месяц'")
+        cursor.execute("UPDATE plans SET price = '129 ₽' WHERE name = 'Plus' AND period = '1 месяц'")
+        cursor.execute("UPDATE plans SET price = '199 ₽' WHERE name = 'Pro' AND period = '1 месяц'")
+
+    try:
+        cursor.execute("ALTER TABLE subscriptions ADD COLUMN is_trial INTEGER DEFAULT 0")
+    except Exception:
+        pass
 
     conn.commit()
     conn.close()
@@ -1436,9 +1443,9 @@ def has_active_subscription(telegram_id: int) -> bool:
     return ok
 
 
-def grant_trial_subscription(telegram_id: int, days: int = 3) -> tuple[bool, str]:
+def grant_trial_subscription(telegram_id: int, days: int = 1) -> tuple[bool, str]:
     """
-    Одноразовая пробная подписка тарифа Start на days дней.
+    One-time trial subscription on Plus plan for 24 hours.
     Returns (ok, message_or_end_date).
     """
     if has_trial_been_granted(telegram_id):
@@ -1451,7 +1458,7 @@ def grant_trial_subscription(telegram_id: int, days: int = 3) -> tuple[bool, str
         return False, "no_user"
 
     start = datetime.now()
-    end = start + timedelta(days=days)
+    end = start + timedelta(hours=24)
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -1462,8 +1469,8 @@ def grant_trial_subscription(telegram_id: int, days: int = 3) -> tuple[bool, str
         """,
         (
             user_id,
-            "Start",
-            f"{days} дня",
+            "Plus",
+            "24 часа",
             "0 ₽",
             start.strftime("%Y-%m-%d %H:%M:%S"),
             end.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1519,3 +1526,67 @@ def get_user_subscription_end_date(telegram_id: int) -> str | None:
         return None
     profile = get_profile(telegram_id)
     return profile[8] if profile else None
+
+
+# =========================
+# TRIAL
+# =========================
+
+def is_trial_used(telegram_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT trial_granted FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return False
+    return bool(row[0])
+
+
+def mark_trial_used(telegram_id: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET trial_granted = 1 WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def create_trial_subscription(telegram_id: int) -> bool:
+    from datetime import datetime, timedelta
+    user_id = get_user_id(telegram_id)
+    if not user_id:
+        return False
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    start_date = datetime.now()
+    end_date = start_date + timedelta(hours=24)
+
+    cursor.execute(
+        """
+        INSERT INTO subscriptions
+        (user_id, plan, period, price, status, start_date, end_date, devices_used, is_trial)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            "Plus",
+            "24 часа",
+            "0 ₽",
+            "pending",
+            start_date.strftime("%Y-%m-%d %H:%M:%S"),
+            end_date.strftime("%Y-%m-%d %H:%M:%S"),
+            0,
+            1,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return True

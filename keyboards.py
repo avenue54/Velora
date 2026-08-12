@@ -68,6 +68,7 @@ def after_price_keyboard() -> ReplyKeyboardMarkup:
 def connect_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="🎁 Попробовать бесплатно")],
             [KeyboardButton(text="💳 Выбрать тариф")],
             [KeyboardButton(text="🏠 Главное меню")],
         ],
@@ -178,6 +179,8 @@ def plans_keyboard(plans):
         name = plan[1]
         if name in added:
             continue
+        if plan[4] != "1 месяц":
+            continue
         label = (
             "🟢 Start" if name == "Start"
             else "🔵 Plus ⭐" if name == "Plus"
@@ -195,6 +198,7 @@ def period_keyboard(plans):
     period_row = [
         KeyboardButton(text=f"{plan[4]} — {plan[5]}")
         for plan in plans
+        if plan[4] == "1 месяц"
     ]
     nav_row = [
         KeyboardButton(text="⬅️ Назад"),
