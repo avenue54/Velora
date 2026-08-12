@@ -217,13 +217,8 @@ async def start(message: Message):
         return
 
     # Уже подписан на канал → приветствие, затем пробник
-    await message.answer_photo(
-        photo=VELORA_BANNER,
-        caption=(
-            "🌐 VELORA\n\n"
-            "Безопасное соединение активно.\n\n"
-            f'<a href="{CHANNEL_LINK}">📰 VELORA News</a>'
-        ),
+    await message.answer(
+        WELCOME_TEXT,
         reply_markup=main_menu_reply_keyboard()
     )
     await _send_trial_if_needed(message, telegram_id=message.from_user.id, bot=message.bot)
