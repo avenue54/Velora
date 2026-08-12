@@ -207,16 +207,17 @@ def create_database():
             VALUES (?, ?, ?, ?, ?)
             """,
             [
-                ("Start", "Для знакомства с VELORA", 2, "1 месяц", "69 ₽"),
-                ("Plus", "Популярный тариф", 5, "1 месяц", "129 ₽"),
-                ("Pro", "Максимальные возможности", 10, "1 месяц", "199 ₽"),
+                ("Start", "Для знакомства с VELORA", 2, "1 месяц", "59 ₽"),
+                ("Plus", "Популярный тариф", 5, "1 месяц", "99 ₽"),
+                ("Pro", "Максимальные возможности", 10, "1 месяц", "149 ₽"),
             ],
         )
     else:
         cursor.execute("UPDATE plans SET active = 0 WHERE period = '3 месяца'")
-        cursor.execute("UPDATE plans SET price = '69 ₽' WHERE name = 'Start' AND period = '1 месяц'")
-        cursor.execute("UPDATE plans SET price = '129 ₽' WHERE name = 'Plus' AND period = '1 месяц'")
-        cursor.execute("UPDATE plans SET price = '199 ₽' WHERE name = 'Pro' AND period = '1 месяц'")
+
+    cursor.execute("UPDATE plans SET price = '59 ₽' WHERE name = 'Start' AND period = '1 месяц'")
+    cursor.execute("UPDATE plans SET price = '99 ₽' WHERE name = 'Plus' AND period = '1 месяц'")
+    cursor.execute("UPDATE plans SET price = '149 ₽' WHERE name = 'Pro' AND period = '1 месяц'")
 
     try:
         cursor.execute("ALTER TABLE subscriptions ADD COLUMN is_trial INTEGER DEFAULT 0")
@@ -1181,7 +1182,7 @@ def get_active_subscription(telegram_id: int):
 
 
 def promo_extend_current(telegram_id: int, promo_row) -> tuple[bool, str]:
-    """Add promo bonus_days to existing active subscription without changing plan."""
+    """Extend existing active subscription by promo bonus_days."""
     days = int(promo_row[3] or 0)
     promo_id = promo_row[0]
     user_id = get_user_id(telegram_id)
@@ -1219,8 +1220,6 @@ def promo_extend_current(telegram_id: int, promo_row) -> tuple[bool, str]:
         conn.close()
         return True, new_end.strftime("%Y-%m-%d %H:%M:%S")
     except Exception as e:
-        conn.close()
-        return False, str(e)
         conn.close()
         return False, str(e)
 
