@@ -706,13 +706,45 @@ def get_expiring_subscriptions(hours=48):
     return rows
 
 
-def mark_subscription_reminded(subscription_id):
+def get_expiring_by_level(hours: int, level: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now()
+    deadline = now + timedelta(hours=hours)
+    cursor.execute(
+        """
+        SELECT
+            subscriptions.id,
+            users.telegram_id,
+            subscriptions.plan,
+            subscriptions.period,
+            subscriptions.end_date
+        FROM subscriptions
+        JOIN users ON subscriptions.user_id = users.id
+        WHERE subscriptions.status = 'active'
+          AND subscriptions.end_date IS NOT NULL
+          AND COALESCE(subscriptions.reminded, 0) < ?
+          AND subscriptions.end_date > ?
+          AND subscriptions.end_date <= ?
+        """,
+        (
+            level,
+            now.strftime("%Y-%m-%d %H:%M:%S"),
+            deadline.strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def mark_subscription_reminded(subscription_id, level: int = 1):
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE subscriptions SET reminded = 1 WHERE id = ?",
-            (subscription_id,),
+            "UPDATE subscriptions SET reminded = ? WHERE id = ? AND COALESCE(reminded, 0) < ?",
+            (level, subscription_id, level),
         )
         conn.commit()
     except Exception:

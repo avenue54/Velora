@@ -11,6 +11,7 @@ from admin import router as admin_router
 from database import (
     create_database,
     get_expiring_subscriptions,
+    get_expiring_by_level,
     mark_subscription_reminded,
 )
 from config import BOT_TOKEN
@@ -19,30 +20,38 @@ load_dotenv()
 
 
 async def subscription_reminder_loop(bot: Bot) -> None:
-    """Раз в час напоминает о подписках, истекающих в ближайшие 48 часов."""
     while True:
         try:
-            expiring = get_expiring_subscriptions(hours=48)
-            for sub_id, tg_id, plan, period, end_date in expiring:
+            LEVELS = [
+                (12, 1, "12 часов"),
+                (6,  2, "6 часов"),
+                (1,  3, "1 час"),
+            ]
+            for hours, level, label in LEVELS:
                 try:
-                    await bot.send_message(
-                        chat_id=tg_id,
-                        text=(
-                            "⏰ <b>Напоминание о подписке VELORA</b>\n\n"
-                            f"Ваша подписка <b>{plan}</b> ({period}) "
-                            f"истекает <b>{end_date}</b>.\n\n"
-                            "Продлите её заранее в разделе «👤 Мой аккаунт» → "
-                            "«🔄 Продлить подписку», чтобы не потерять доступ."
-                        ),
-                    )
-                    mark_subscription_reminded(sub_id)
-                    print(f"Reminder sent: sub #{sub_id} → {tg_id}")
+                    subs = get_expiring_by_level(hours=hours, level=level)
+                    for sub_id, tg_id, plan, period, end_date in subs:
+                        try:
+                            await bot.send_message(
+                                chat_id=tg_id,
+                                text=(
+                                    f"⏰ <b>Подписка истекает через {label}</b>\n\n"
+                                    f"Тариф: <b>{plan}</b> ({period})\n"
+                                    f"Истекает: <b>{end_date}</b>\n\n"
+                                    "Продлите подписку в разделе «👤 Мой аккаунт» → "
+                                    "«🔄 Продлить подписку», чтобы не потерять доступ."
+                                ),
+                            )
+                            mark_subscription_reminded(sub_id, level=level)
+                            print(f"Reminder L{level} sent: sub #{sub_id} → {tg_id}")
+                        except Exception as e:
+                            print(f"Reminder L{level} fail sub #{sub_id}: {e}")
                 except Exception as e:
-                    print(f"Reminder fail sub #{sub_id}: {e}")
+                    print(f"Reminder L{level} loop error: {e}")
         except Exception as e:
             print(f"Reminder loop error: {e}")
 
-        await asyncio.sleep(3600)
+        await asyncio.sleep(1800)
 
 
 async def main() -> None:
