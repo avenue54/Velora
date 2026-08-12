@@ -128,7 +128,9 @@ def _fmt_end_msk(end_date: str) -> str:
         return str(end_date)[:16]
 
 
-router = Router()
+VELORA_BANNER = "AgACAgIAAxkBAAIVDGp8lCT6WyPrIhSu-Y3YjgbImoSuAAK9IGsb_8nhS9iI_LG--pgAAQEAAwIAA3kAAz0E"
+
+
 
 
 # ======================
@@ -215,8 +217,13 @@ async def start(message: Message):
         return
 
     # Уже подписан на канал → приветствие, затем пробник
-    await message.answer(
-        WELCOME_TEXT,
+    await message.answer_photo(
+        photo=VELORA_BANNER,
+        caption=(
+            "🌐 VELORA\n\n"
+            "Безопасное соединение активно.\n\n"
+            f'<a href="{CHANNEL_LINK}">📰 VELORA News</a>'
+        ),
         reply_markup=main_menu_reply_keyboard()
     )
     await _send_trial_if_needed(message, telegram_id=message.from_user.id, bot=message.bot)
@@ -1215,19 +1222,15 @@ async def back_to_tariffs(message: Message):
 async def main_menu(message: Message, state: FSMContext):
     await state.clear()
     expire_outdated_subscriptions()
-    text = "🌐 VELORA\n\nБезопасное соединение активно.\n\nВыберите раздел 👇"
+
     text = (
-        text
-        + chr(10)
-        + chr(10)
-        + f'<a href="{CHANNEL_LINK}">📰 VELORA News</a>'
+        "🌐 VELORA\n\n"
+        "Безопасное соединение активно.\n\n"
+        f'<a href="{CHANNEL_LINK}">📰 VELORA News</a>'
     )
-    await message.answer(
-        text,
+
+    await message.answer_photo(
+        photo=VELORA_BANNER,
+        caption=text,
         reply_markup=main_menu_reply_keyboard(),
     )
-    
-@router.message(F.photo)
-async def get_photo_id(message: Message):
-    file_id = message.photo[-1].file_id
-    await message.answer(f"file_id:\n<code>{file_id}</code>")
