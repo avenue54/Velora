@@ -1226,3 +1226,8 @@ async def main_menu(message: Message, state: FSMContext):
         text,
         reply_markup=main_menu_reply_keyboard(),
     )
+    
+@router.message(F.photo)
+async def get_photo_id(message: Message):
+    file_id = message.photo[-1].file_id
+    await message.answer(f"file_id:\n<code>{file_id}</code>")
