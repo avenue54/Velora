@@ -89,9 +89,6 @@ from database import (
     get_promo,
     is_promo_valid,
     apply_promo_use,
-    get_active_subscription,
-    promo_extend_current,
-    promo_create_new,
     count_device_slots,
     list_device_slots,
     add_device_slot,
@@ -1060,137 +1057,51 @@ async def promo_user_apply(message: Message, state: FSMContext):
     code = (message.text or "").strip().upper()
     promo = get_promo(code)
     await state.clear()
-
     ok, err = is_promo_valid(promo)
     if not ok:
         await message.answer(f"❌ {err}")
         return
-
-    # Проверка на повторное использование
-    from database import get_connection as _gc
-    _conn = _gc()
-    _cur = _conn.cursor()
-    _cur.execute(
-        "SELECT 1 FROM promo_uses WHERE promo_id = ? AND telegram_id = ?",
-        (promo[0], message.from_user.id),
-    )
-    already = _cur.fetchone()
-    _conn.close()
-    if already:
+    bonus_days = int(promo[3] or 0)
+    if not apply_promo_use(promo[0], message.from_user.id):
         await message.answer("❌ Вы уже использовали этот промокод.")
         return
 
-    days = int(promo[3] or 0)
-    plan = promo[8] if len(promo) > 8 else "Plus"
+    ok, info = extend_active_subscription_days(message.from_user.id, bonus_days)
     nl = chr(10)
 
-    active = get_active_subscription(message.from_user.id)
-
-    if not active:
-        ok, info = promo_create_new(message.from_user.id, promo)
-        if not ok:
-            await message.answer(f"❌ {info}")
-            return
+    # синхрон срока на API (Happ /sub)
+    if ok and info and info != "stored_bonus":
         try:
+            profile = get_profile(message.from_user.id)
+            plan = (profile[3] if profile else None) or "Start"
+            period = (profile[4] if profile else None) or ""
             await create_vpn_subscription(
                 telegram_id=message.from_user.id,
                 plan=plan,
-                period=f"{days} дн.",
+                period=period,
                 end_date=info,
             )
         except Exception as e:
             print(f"promo API sync fail: {e}")
+
+    if ok and info != "stored_bonus":
         end_show = _fmt_end_msk(info) if info else info
         await message.answer(
             f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
-            + f"Тариф: <b>{plan}</b>" + nl
-            + f"Срок: <b>{days} дн.</b>" + nl
-            + f"Действует до: <b>{end_show}</b>" + nl + nl
-            + "Получить конфигурацию: «🚀 Подключиться»"
+            + f"Вам начислено <b>+{bonus_days} дн.</b> к подписке." + nl
+            + f"Новая дата окончания: <b>{end_show}</b>"
+        )
+    elif ok:
+        await message.answer(
+            f"✅ Промокод <code>{promo[1]}</code> принят!" + nl + nl
+            + f"Вам начислено <b>+{bonus_days} дн.</b>." + nl
+            + "Активной подписки нет — дни добавятся при активации."
         )
     else:
-        _, active_plan, _ = active
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"📅 Продлить {active_plan} на +{days} дн.",
-                callback_data=f"promo_extend:{code}"
-            )],
-            [InlineKeyboardButton(
-                text=f"🔄 Заменить на {plan} ({days} дн.)",
-                callback_data=f"promo_new:{code}"
-            )],
-        ])
         await message.answer(
-            f"У вас активна подписка <b>{active_plan}</b>.\n\n"
-            f"Промокод даёт <b>{plan}</b> на <b>{days} дн.</b>\n\n"
-            "Выберите действие:",
-            reply_markup=kb
+            "✅ Промокод учтён, но не удалось продлить подписку. "
+            "Напишите в поддержку."
         )
-
-
-@router.callback_query(F.data.startswith("promo_extend:"))
-async def promo_choice_extend(callback: CallbackQuery):
-    code = callback.data.split(":", 1)[1]
-    promo = get_promo(code)
-    if not promo:
-        await callback.answer("Промокод не найден.", show_alert=True)
-        return
-    days = int(promo[3] or 0)
-    active = get_active_subscription(callback.from_user.id)
-    if not active:
-        await callback.answer("Нет активной подписки.", show_alert=True)
-        return
-    _, active_plan, end_date = active
-    nl = chr(10)
-
-    ok, info = promo_extend_current(callback.from_user.id, promo)
-    await callback.message.delete()
-    if not ok:
-        await callback.message.answer(f"❌ {info}")
-        await callback.answer()
-        return
-    end_show = _fmt_end_msk(info) if info else info
-    await callback.message.answer(
-        f"✅ Подписка <b>{active_plan}</b> продлена на <b>+{days} дн.</b>!" + nl + nl
-        + f"Действует до: <b>{end_show}</b>"
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("promo_new:"))
-async def promo_choice_new(callback: CallbackQuery):
-    code = callback.data.split(":", 1)[1]
-    promo = get_promo(code)
-    if not promo:
-        await callback.answer("Промокод не найден.", show_alert=True)
-        return
-    days = int(promo[3] or 0)
-    plan = promo[8] if len(promo) > 8 else "Plus"
-    nl = chr(10)
-
-    ok, info = promo_create_new(callback.from_user.id, promo)
-    await callback.message.delete()
-    if not ok:
-        await callback.message.answer(f"❌ {info}")
-        await callback.answer()
-        return
-    try:
-        await create_vpn_subscription(
-            telegram_id=callback.from_user.id,
-            plan=plan,
-            period=f"{days} дн.",
-            end_date=info,
-        )
-    except Exception as e:
-        print(f"promo API sync fail: {e}")
-    end_show = _fmt_end_msk(info) if info else info
-    await callback.message.answer(
-        f"✅ Подписка заменена на <b>{plan}</b> ({days} дн.)!" + nl + nl
-        + f"Действует до: <b>{end_show}</b>" + nl + nl
-        + "Обновите конфигурацию: «🚀 Подключиться»"
-    )
-    await callback.answer()
 
 @router.callback_query(F.data == "payment:pay")
 async def pay_button(callback: CallbackQuery):
@@ -1304,34 +1215,13 @@ async def back_to_tariffs(message: Message):
 async def main_menu(message: Message, state: FSMContext):
     await state.clear()
     expire_outdated_subscriptions()
-    text = random.choice(MAIN_MENU_TEXTS)
-    profile = get_profile(message.from_user.id)
-    if profile and profile[3] and is_user_subscription_active(message.from_user.id):
-        plan = profile[3]
-        end_date = profile[8]
-        days_part = ""
-        if end_date:
-            try:
-                end_dt = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
-                days = max(0, (end_dt - datetime.now()).days)
-                days_part = f" ещё <b>{days}</b> дн."
-            except Exception:
-                days_part = ""
-        text = (
-            text
-            + chr(10)
-            + chr(10)
-            + f"Статус: <b>{plan}</b> активна{days_part}"
-        )
-
+    text = "🌐 VELORA\n\nБезопасное соединение активно.\n\nВыберите раздел 👇"
     text = (
         text
         + chr(10)
         + chr(10)
         + f'<a href="{CHANNEL_LINK}">📰 VELORA News</a>'
     )
-
-    # Одно сообщение: текст + возврат кнопок главного меню
     await message.answer(
         text,
         reply_markup=main_menu_reply_keyboard(),
