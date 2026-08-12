@@ -706,45 +706,13 @@ def get_expiring_subscriptions(hours=48):
     return rows
 
 
-def get_expiring_by_level(hours: int, level: int):
-    conn = get_connection()
-    cursor = conn.cursor()
-    now = datetime.now()
-    deadline = now + timedelta(hours=hours)
-    cursor.execute(
-        """
-        SELECT
-            subscriptions.id,
-            users.telegram_id,
-            subscriptions.plan,
-            subscriptions.period,
-            subscriptions.end_date
-        FROM subscriptions
-        JOIN users ON subscriptions.user_id = users.id
-        WHERE subscriptions.status = 'active'
-          AND subscriptions.end_date IS NOT NULL
-          AND COALESCE(subscriptions.reminded, 0) < ?
-          AND subscriptions.end_date > ?
-          AND subscriptions.end_date <= ?
-        """,
-        (
-            level,
-            now.strftime("%Y-%m-%d %H:%M:%S"),
-            deadline.strftime("%Y-%m-%d %H:%M:%S"),
-        ),
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
-
-
-def mark_subscription_reminded(subscription_id, level: int = 1):
+def mark_subscription_reminded(subscription_id):
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE subscriptions SET reminded = ? WHERE id = ? AND COALESCE(reminded, 0) < ?",
-            (level, subscription_id, level),
+            "UPDATE subscriptions SET reminded = 1 WHERE id = ?",
+            (subscription_id,),
         )
         conn.commit()
     except Exception:
@@ -1056,13 +1024,11 @@ def create_promo_code(
 ) -> bool:
     conn = get_connection()
     cursor = conn.cursor()
-
     try:
         cursor.execute("ALTER TABLE promo_codes ADD COLUMN plan TEXT DEFAULT 'Plus'")
         conn.commit()
     except Exception:
         pass
-
     created = datetime.now()
     expires_at = None
     if int(expires_in_days) > 0:
@@ -1193,27 +1159,91 @@ def deactivate_promo(code: str) -> None:
     conn.close()
 
 
-def apply_promo_subscription(telegram_id: int, promo_row) -> tuple[bool, str]:
-    """
-    Creates a new subscription based on promo_row.
-    promo_row: (id, code, discount, bonus_days, max_uses, used_count, active, expires_at, plan)
-    Returns (ok, end_date_str or error).
-    """
-    if not promo_row:
-        return False, "Промокод не найден."
+def get_active_subscription(telegram_id: int):
+    """Returns (sub_id, plan, end_date) or None."""
+    user_id = get_user_id(telegram_id)
+    if not user_id:
+        return None
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, plan, end_date FROM subscriptions
+        WHERE user_id = ? AND status = 'active'
+          AND (end_date IS NULL OR end_date > datetime('now', 'localtime'))
+        ORDER BY id DESC LIMIT 1
+        """,
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row
 
-    promo_id = promo_row[0]
+
+def promo_extend_current(telegram_id: int, promo_row) -> tuple[bool, str]:
+    """Extend existing active subscription by promo bonus_days."""
     days = int(promo_row[3] or 0)
-    plan = promo_row[8] if len(promo_row) > 8 else "Plus"
-
-    if days <= 0:
-        return False, "Промокод не даёт дней."
-
+    promo_id = promo_row[0]
     user_id = get_user_id(telegram_id)
     if not user_id:
         return False, "Пользователь не найден."
 
-    start = datetime.now()
+    active = get_active_subscription(telegram_id)
+    if not active:
+        return False, "Нет активной подписки."
+
+    sub_id, _, end_date = active
+    now = datetime.now()
+    try:
+        base = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S") if end_date else now
+    except Exception:
+        base = now
+    new_end = base + timedelta(days=days)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE subscriptions SET end_date = ? WHERE id = ?",
+            (new_end.strftime("%Y-%m-%d %H:%M:%S"), sub_id),
+        )
+        cursor.execute(
+            "INSERT INTO promo_uses (promo_id, telegram_id, used_at) VALUES (?, ?, ?)",
+            (promo_id, telegram_id, now.strftime("%Y-%m-%d %H:%M:%S")),
+        )
+        cursor.execute(
+            "UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?",
+            (promo_id,),
+        )
+        conn.commit()
+        conn.close()
+        return True, new_end.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def promo_create_new(telegram_id: int, promo_row) -> tuple[bool, str]:
+    """Create new subscription with promo plan, starting after current ends."""
+    days = int(promo_row[3] or 0)
+    plan = promo_row[8] if len(promo_row) > 8 else "Plus"
+    promo_id = promo_row[0]
+    user_id = get_user_id(telegram_id)
+    if not user_id:
+        return False, "Пользователь не найден."
+
+    active = get_active_subscription(telegram_id)
+    now = datetime.now()
+
+    if active:
+        _, _, end_date = active
+        try:
+            start = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S") if end_date else now
+        except Exception:
+            start = now
+    else:
+        start = now
+
     end = start + timedelta(days=days)
 
     conn = get_connection()
@@ -1226,17 +1256,14 @@ def apply_promo_subscription(telegram_id: int, promo_row) -> tuple[bool, str]:
             VALUES (?, ?, ?, ?, 'active', ?, ?, 0)
             """,
             (
-                user_id,
-                plan,
-                f"{days} дн.",
-                "0 ₽",
+                user_id, plan, f"{days} дн.", "0 ₽",
                 start.strftime("%Y-%m-%d %H:%M:%S"),
                 end.strftime("%Y-%m-%d %H:%M:%S"),
             ),
         )
         cursor.execute(
             "INSERT INTO promo_uses (promo_id, telegram_id, used_at) VALUES (?, ?, ?)",
-            (promo_id, telegram_id, start.strftime("%Y-%m-%d %H:%M:%S")),
+            (promo_id, telegram_id, now.strftime("%Y-%m-%d %H:%M:%S")),
         )
         cursor.execute(
             "UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?",
@@ -1244,7 +1271,7 @@ def apply_promo_subscription(telegram_id: int, promo_row) -> tuple[bool, str]:
         )
         conn.commit()
         conn.close()
-        return True, end.strftime("%d.%m.%Y %H:%M")
+        return True, end.strftime("%Y-%m-%d %H:%M:%S")
     except Exception as e:
         conn.close()
         return False, str(e)

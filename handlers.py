@@ -89,7 +89,9 @@ from database import (
     get_promo,
     is_promo_valid,
     apply_promo_use,
-    apply_promo_subscription,
+    get_active_subscription,
+    promo_extend_current,
+    promo_create_new,
     count_device_slots,
     list_device_slots,
     add_device_slot,
@@ -1063,33 +1065,124 @@ async def promo_user_apply(message: Message, state: FSMContext):
         await message.answer(f"❌ {err}")
         return
 
-    nl = chr(10)
-    bonus_days = int(promo[3] or 0)
+    days = int(promo[3] or 0)
     plan = promo[8] if len(promo) > 8 else "Plus"
+    nl = chr(10)
 
-    ok, info = apply_promo_subscription(message.from_user.id, promo)
-    if not ok:
-        await message.answer(f"❌ {info}")
+    active = get_active_subscription(message.from_user.id)
+
+    if active:
+        _, active_plan, active_end = active
+        if active_plan == plan:
+            ok, info = promo_extend_current(message.from_user.id, promo)
+            if not ok:
+                await message.answer(f"❌ {info}")
+                return
+            end_show = _fmt_end_msk(info) if info else info
+            await message.answer(
+                f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
+                + f"Тариф: <b>{plan}</b>" + nl
+                + f"+{days} дн. к подписке" + nl
+                + f"Действует до: <b>{end_show}</b>"
+            )
+        else:
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text=f"📅 Добавить {plan} после {active_plan}",
+                    callback_data=f"promo_new:{code}"
+                )],
+                [InlineKeyboardButton(
+                    text=f"🔄 Заменить {active_plan} → {plan} (+{days} дн.)",
+                    callback_data=f"promo_extend:{code}"
+                )],
+            ])
+            await message.answer(
+                f"У вас активна подписка <b>{active_plan}</b>.\n\n"
+                f"Промокод даёт <b>{plan}</b> на <b>{days} дн.</b>\n\n"
+                "Выберите действие:",
+                reply_markup=kb
+            )
+    else:
+        ok, info = promo_create_new(message.from_user.id, promo)
+        if not ok:
+            await message.answer(f"❌ {info}")
+            return
+        try:
+            await create_vpn_subscription(
+                telegram_id=message.from_user.id,
+                plan=plan,
+                period=f"{days} дн.",
+                end_date=info,
+            )
+        except Exception as e:
+            print(f"promo API sync fail: {e}")
+        end_show = _fmt_end_msk(info) if info else info
+        await message.answer(
+            f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
+            + f"Тариф: <b>{plan}</b>" + nl
+            + f"Срок: <b>{days} дн.</b>" + nl
+            + f"Действует до: <b>{end_show}</b>" + nl + nl
+            + "Получить конфигурацию: «🚀 Подключиться»"
+        )
+
+
+@router.callback_query(F.data.startswith("promo_new:"))
+async def promo_choice_new(callback: CallbackQuery):
+    code = callback.data.split(":", 1)[1]
+    promo = get_promo(code)
+    if not promo:
+        await callback.answer("Промокод не найден.", show_alert=True)
         return
+    days = int(promo[3] or 0)
+    plan = promo[8] if len(promo) > 8 else "Plus"
+    nl = chr(10)
 
+    ok, info = promo_create_new(callback.from_user.id, promo)
+    await callback.message.delete()
+    if not ok:
+        await callback.message.answer(f"❌ {info}")
+        return
     try:
         await create_vpn_subscription(
-            telegram_id=message.from_user.id,
+            telegram_id=callback.from_user.id,
             plan=plan,
-            period=f"{bonus_days} дн.",
+            period=f"{days} дн.",
             end_date=info,
         )
     except Exception as e:
         print(f"promo API sync fail: {e}")
-
     end_show = _fmt_end_msk(info) if info else info
-    await message.answer(
-        f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
-        + f"Тариф: <b>{plan}</b>" + nl
-        + f"Срок: <b>{bonus_days} дн.</b>" + nl
-        + f"Действует до: <b>{end_show}</b>" + nl + nl
-        + "Получить конфигурацию: «🚀 Подключиться»"
+    await callback.message.answer(
+        f"✅ Подписка <b>{plan}</b> добавлена!" + nl + nl
+        + f"Начнётся после окончания текущей." + nl
+        + f"Действует до: <b>{end_show}</b>"
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("promo_extend:"))
+async def promo_choice_extend(callback: CallbackQuery):
+    code = callback.data.split(":", 1)[1]
+    promo = get_promo(code)
+    if not promo:
+        await callback.answer("Промокод не найден.", show_alert=True)
+        return
+    days = int(promo[3] or 0)
+    plan = promo[8] if len(promo) > 8 else "Plus"
+    nl = chr(10)
+
+    ok, info = promo_extend_current(callback.from_user.id, promo)
+    await callback.message.delete()
+    if not ok:
+        await callback.message.answer(f"❌ {info}")
+        return
+    end_show = _fmt_end_msk(info) if info else info
+    await callback.message.answer(
+        f"✅ Подписка продлена на <b>{days} дн.</b> (тариф {plan})!" + nl + nl
+        + f"Действует до: <b>{end_show}</b>"
+    )
+    await callback.answer()
 
 @router.callback_query(F.data == "payment:pay")
 async def pay_button(callback: CallbackQuery):
