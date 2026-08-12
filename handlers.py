@@ -89,6 +89,7 @@ from database import (
     get_promo,
     is_promo_valid,
     apply_promo_use,
+    apply_promo_subscription,
     count_device_slots,
     list_device_slots,
     add_device_slot,
@@ -1061,47 +1062,34 @@ async def promo_user_apply(message: Message, state: FSMContext):
     if not ok:
         await message.answer(f"❌ {err}")
         return
+
+    nl = chr(10)
     bonus_days = int(promo[3] or 0)
-    if not apply_promo_use(promo[0], message.from_user.id):
-        await message.answer("❌ Вы уже использовали этот промокод.")
+    plan = promo[8] if len(promo) > 8 else "Plus"
+
+    ok, info = apply_promo_subscription(message.from_user.id, promo)
+    if not ok:
+        await message.answer(f"❌ {info}")
         return
 
-    ok, info = extend_active_subscription_days(message.from_user.id, bonus_days)
-    nl = chr(10)
+    try:
+        await create_vpn_subscription(
+            telegram_id=message.from_user.id,
+            plan=plan,
+            period=f"{bonus_days} дн.",
+            end_date=info,
+        )
+    except Exception as e:
+        print(f"promo API sync fail: {e}")
 
-    # синхрон срока на API (Happ /sub)
-    if ok and info and info != "stored_bonus":
-        try:
-            profile = get_profile(message.from_user.id)
-            plan = (profile[3] if profile else None) or "Start"
-            period = (profile[4] if profile else None) or ""
-            await create_vpn_subscription(
-                telegram_id=message.from_user.id,
-                plan=plan,
-                period=period,
-                end_date=info,
-            )
-        except Exception as e:
-            print(f"promo API sync fail: {e}")
-
-    if ok and info != "stored_bonus":
-        end_show = _fmt_end_msk(info) if info else info
-        await message.answer(
-            f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
-            + f"Вам начислено <b>+{bonus_days} дн.</b> к подписке." + nl
-            + f"Новая дата окончания: <b>{end_show}</b>"
-        )
-    elif ok:
-        await message.answer(
-            f"✅ Промокод <code>{promo[1]}</code> принят!" + nl + nl
-            + f"Вам начислено <b>+{bonus_days} дн.</b>." + nl
-            + "Активной подписки нет — дни добавятся при активации."
-        )
-    else:
-        await message.answer(
-            "✅ Промокод учтён, но не удалось продлить подписку. "
-            "Напишите в поддержку."
-        )
+    end_show = _fmt_end_msk(info) if info else info
+    await message.answer(
+        f"✅ Промокод <code>{promo[1]}</code> применён!" + nl + nl
+        + f"Тариф: <b>{plan}</b>" + nl
+        + f"Срок: <b>{bonus_days} дн.</b>" + nl
+        + f"Действует до: <b>{end_show}</b>" + nl + nl
+        + "Получить конфигурацию: «🚀 Подключиться»"
+    )
 
 @router.callback_query(F.data == "payment:pay")
 async def pay_button(callback: CallbackQuery):

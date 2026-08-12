@@ -26,6 +26,7 @@ class AdminAuthState(StatesGroup):
 
 class PromoAdminState(StatesGroup):
     waiting_code = State()
+    waiting_plan = State()
     waiting_discount = State()
     waiting_bonus_days = State()
     waiting_max_uses = State()

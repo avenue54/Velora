@@ -1052,12 +1052,17 @@ def create_promo_code(
     expires_in_days: int = 0,
     discount_percent: int = 0,
     max_uses: int = 0,
+    plan: str = "Plus",
 ) -> bool:
-    """
-    expires_in_days: 0 = бессрочный, иначе промо действует N дней с момента создания.
-    """
     conn = get_connection()
     cursor = conn.cursor()
+
+    try:
+        cursor.execute("ALTER TABLE promo_codes ADD COLUMN plan TEXT DEFAULT 'Plus'")
+        conn.commit()
+    except Exception:
+        pass
+
     created = datetime.now()
     expires_at = None
     if int(expires_in_days) > 0:
@@ -1066,8 +1071,8 @@ def create_promo_code(
         cursor.execute(
             """
             INSERT INTO promo_codes
-            (code, discount_percent, bonus_days, max_uses, used_count, active, created_at, expires_at)
-            VALUES (?, ?, ?, ?, 0, 1, ?, ?)
+            (code, discount_percent, bonus_days, max_uses, used_count, active, created_at, expires_at, plan)
+            VALUES (?, ?, ?, ?, 0, 1, ?, ?, ?)
             """,
             (
                 code.strip().upper(),
@@ -1076,6 +1081,7 @@ def create_promo_code(
                 int(max_uses),
                 created.strftime("%Y-%m-%d %H:%M:%S"),
                 expires_at,
+                plan,
             ),
         )
         conn.commit()
@@ -1089,14 +1095,15 @@ def create_promo_code(
 def get_promo(code: str):
     """
     Returns tuple:
-    id, code, discount_percent, bonus_days, max_uses, used_count, active, expires_at
+    id, code, discount_percent, bonus_days, max_uses, used_count, active, expires_at, plan
     or None
     """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT id, code, discount_percent, bonus_days, max_uses, used_count, active, expires_at
+        SELECT id, code, discount_percent, bonus_days, max_uses, used_count, active, expires_at,
+               COALESCE(plan, 'Plus') as plan
         FROM promo_codes WHERE code = ?
         """,
         (code.strip().upper(),),
@@ -1184,7 +1191,63 @@ def deactivate_promo(code: str) -> None:
     )
     conn.commit()
     conn.close()
-    
+
+
+def apply_promo_subscription(telegram_id: int, promo_row) -> tuple[bool, str]:
+    """
+    Creates a new subscription based on promo_row.
+    promo_row: (id, code, discount, bonus_days, max_uses, used_count, active, expires_at, plan)
+    Returns (ok, end_date_str or error).
+    """
+    if not promo_row:
+        return False, "Промокод не найден."
+
+    promo_id = promo_row[0]
+    days = int(promo_row[3] or 0)
+    plan = promo_row[8] if len(promo_row) > 8 else "Plus"
+
+    if days <= 0:
+        return False, "Промокод не даёт дней."
+
+    user_id = get_user_id(telegram_id)
+    if not user_id:
+        return False, "Пользователь не найден."
+
+    start = datetime.now()
+    end = start + timedelta(days=days)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO subscriptions
+            (user_id, plan, period, price, status, start_date, end_date, devices_used)
+            VALUES (?, ?, ?, ?, 'active', ?, ?, 0)
+            """,
+            (
+                user_id,
+                plan,
+                f"{days} дн.",
+                "0 ₽",
+                start.strftime("%Y-%m-%d %H:%M:%S"),
+                end.strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+        cursor.execute(
+            "INSERT INTO promo_uses (promo_id, telegram_id, used_at) VALUES (?, ?, ?)",
+            (promo_id, telegram_id, start.strftime("%Y-%m-%d %H:%M:%S")),
+        )
+        cursor.execute(
+            "UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?",
+            (promo_id,),
+        )
+        conn.commit()
+        conn.close()
+        return True, end.strftime("%d.%m.%Y %H:%M")
+    except Exception as e:
+        conn.close()
+        return False, str(e)
 def get_promo_usage_stats():
     """Список: (code, used_count, active) по всем промо."""
     conn = get_connection()

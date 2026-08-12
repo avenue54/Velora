@@ -342,10 +342,29 @@ async def promo_code_entered(message: Message, state: FSMContext):
         await message.answer("Слишком короткое название (мин. 3 символа).")
         return
     await state.update_data(code=code)
+    await state.set_state(PromoAdminState.waiting_plan)
+    await message.answer(
+        "2. Какой тариф даёт промокод?\n\n"
+        "• <code>Start</code>\n"
+        "• <code>Plus</code>\n"
+        "• <code>Pro</code>\n\n"
+        "Напишите название тарифа:"
+    )
+
+
+@router.message(PromoAdminState.waiting_plan)
+async def promo_plan_entered(message: Message, state: FSMContext):
+    if not _require_admin(message):
+        return
+    plan = (message.text or "").strip().capitalize()
+    if plan not in ("Start", "Plus", "Pro"):
+        await message.answer("Неверный тариф. Напишите: Start, Plus или Pro")
+        return
+    await state.update_data(plan=plan)
     await state.set_state(PromoAdminState.waiting_bonus_days)
     await message.answer(
-        "2. Сколько <b>+дней</b> даёт промокод?\n"
-        "Напишите число (например 7):"
+        f"3. Сколько <b>дней</b> тарифа <b>{plan}</b> даёт промокод?\n"
+        "Напишите число (например 2):"
     )
 
 
@@ -372,9 +391,9 @@ async def promo_bonus_entered(message: Message, state: FSMContext):
     await state.update_data(bonus_days=b)
     await state.set_state(PromoAdminState.waiting_expires)
     await message.answer(
-        "3. Окончание промо (срок действия кода в днях).\n"
+        "4. Срок действия кода (в днях).\n"
         "• <b>0</b> — бессрочный\n"
-        "• <b>30</b> — действует 30 дней с сейчас\n\n"
+        "• <b>30</b> — действует 30 дней\n\n"
         "Напишите число:"
     )
 
@@ -405,25 +424,25 @@ async def promo_expires_entered(message: Message, state: FSMContext):
     data = await state.get_data()
     code = data["code"]
     days = int(data.get("bonus_days", 0))
+    plan = data.get("plan", "Plus")
     ok = create_promo_code(
         code=code,
         bonus_days=days,
         expires_in_days=exp_days,
         discount_percent=0,
         max_uses=0,
+        plan=plan,
     )
     await state.clear()
     if not ok:
         await message.answer("❌ Не удалось создать (возможно, такое название уже есть).")
         return
-    if exp_days == 0:
-        exp_txt = "бессрочно"
-    else:
-        exp_txt = f"{exp_days} дн. с сегодня"
+    exp_txt = "бессрочно" if exp_days == 0 else f"{exp_days} дн. с сегодня"
     nl = chr(10)
     await message.answer(
         f"✅ Промокод <code>{code}</code> создан" + nl + nl
-        + f"• +{days} дн. к подписке" + nl
+        + f"• Тариф: {plan}" + nl
+        + f"• +{days} дн. подписки" + nl
         + f"• Срок действия кода: {exp_txt}",
         reply_markup=admin_main_keyboard(),
     )
