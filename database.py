@@ -1181,9 +1181,10 @@ def get_active_subscription(telegram_id: int):
 
 
 def promo_extend_current(telegram_id: int, promo_row) -> tuple[bool, str]:
-    """Extend existing active subscription by promo bonus_days."""
+    """Extend existing active subscription by promo bonus_days and update plan."""
     days = int(promo_row[3] or 0)
     promo_id = promo_row[0]
+    plan = promo_row[8] if len(promo_row) > 8 else "Plus"
     user_id = get_user_id(telegram_id)
     if not user_id:
         return False, "Пользователь не найден."
@@ -1204,8 +1205,8 @@ def promo_extend_current(telegram_id: int, promo_row) -> tuple[bool, str]:
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE subscriptions SET end_date = ? WHERE id = ?",
-            (new_end.strftime("%Y-%m-%d %H:%M:%S"), sub_id),
+            "UPDATE subscriptions SET end_date = ?, plan = ? WHERE id = ?",
+            (new_end.strftime("%Y-%m-%d %H:%M:%S"), plan, sub_id),
         )
         cursor.execute(
             "INSERT INTO promo_uses (promo_id, telegram_id, used_at) VALUES (?, ?, ?)",
