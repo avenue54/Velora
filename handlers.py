@@ -453,10 +453,9 @@ async def _issue_config_with_device(message: Message) -> None:
         await message.answer(
             "✅ <b>Подключение</b>" + nl + nl
             + f"📱 Слот: <b>{label}</b> ({slot_n}/{limit})" + nl + nl
-            + f"🌐 <a href=\"{profile_url}\">Открыть профиль VELORA</a>" + nl + nl
-            + "📥 Ссылка на конфиг:" + nl
-            + f"<code>{url}</code>" + nl + nl
-            + "Импорт в Hiddify / v2rayNG / Streisand." + nl
+            + "🌐 Ваш профиль VELORA:" + nl
+            + f"<code>{profile_url}</code>" + nl + nl
+            + "Откройте ссылку и нажмите «Добавить подписку»." + nl
             + "Не пересылайте ссылку третьим лицам.",
             reply_markup=get_config_keyboard(),
         )
