@@ -521,7 +521,6 @@ async def cb_device_new(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("device_reuse:"))
 async def cb_device_reuse(callback: CallbackQuery):
-    nl = chr(10)
     profile = get_profile(callback.from_user.id)
     plan = profile[3] or ""
     limit = get_device_limit(plan)
@@ -530,8 +529,40 @@ async def cb_device_reuse(callback: CallbackQuery):
     label = next((l for sid, l, _ in slots if sid == slot_id), "Устройство")
     slot_n = next((i+1 for i, (sid, _, _) in enumerate(slots) if sid == slot_id), 1)
     await callback.message.delete()
-    await _send_config(callback.message, label, slot_n, limit)
     await callback.answer()
+
+    nl = chr(10)
+    try:
+        end_date = get_user_subscription_end_date(callback.from_user.id)
+        data = await create_vpn_subscription(
+            telegram_id=callback.from_user.id,
+            plan=plan,
+            period=profile[4] or "",
+            end_date=end_date,
+        )
+        url = data["url"]
+        token = url.split("/sub/")[-1] if "/sub/" in url else ""
+        username = callback.from_user.username
+        profile_url = f"https://getvelora.xyz/profile/{token}"
+        if username:
+            profile_url += f"?u=@{username}"
+        await callback.bot.send_message(
+            callback.from_user.id,
+            "✅ <b>Подключение</b>" + nl + nl
+            + f"📱 <b>{label}</b> ({slot_n}/{limit})" + nl + nl
+            + "🌐 Ваш профиль VELORA:" + nl
+            + f"<code>{profile_url}</code>" + nl + nl
+            + "Откройте ссылку и нажмите «Добавить подписку»." + nl
+            + "Не пересылайте ссылку третьим лицам.",
+            reply_markup=get_config_keyboard(),
+        )
+    except Exception as e:
+        print(f"device_reuse fail: {e}")
+        await callback.bot.send_message(
+            callback.from_user.id,
+            "⚠️ Ошибка при выдаче конфигурации. Попробуйте позже.",
+            reply_markup=get_config_keyboard(),
+        )
 
 
 @router.message(F.text == "🔌 Подключить устройство")
