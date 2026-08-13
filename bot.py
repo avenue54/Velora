@@ -13,6 +13,7 @@ from database import (
     get_expiring_subscriptions,
     get_expiring_by_level,
     mark_subscription_reminded,
+    expire_outdated_subscriptions,
 )
 from config import BOT_TOKEN
 
@@ -22,6 +23,7 @@ load_dotenv()
 async def subscription_reminder_loop(bot: Bot) -> None:
     while True:
         try:
+            expire_outdated_subscriptions()
             LEVELS = [
                 (12, 1, "12 часов"),
                 (6,  2, "6 часов"),

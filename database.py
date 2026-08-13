@@ -5,7 +5,7 @@ import hashlib
 import secrets
 import string
 
-DB_NAME = "/app/data/velora.db"
+DB_NAME = "/home/daniil/velora-bot/velora.db"
 
 
 def get_connection():
@@ -707,13 +707,13 @@ def get_expiring_subscriptions(hours=48):
     return rows
 
 
-def mark_subscription_reminded(subscription_id):
+def mark_subscription_reminded(subscription_id, level: int = 1):
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE subscriptions SET reminded = 1 WHERE id = ?",
-            (subscription_id,),
+            "UPDATE subscriptions SET reminded = ? WHERE id = ? AND COALESCE(reminded, 0) < ?",
+            (level, subscription_id, level),
         )
         conn.commit()
     except Exception:
