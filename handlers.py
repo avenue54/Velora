@@ -445,9 +445,15 @@ async def _issue_config_with_device(message: Message) -> None:
             end_date=end_date,
         )
         url = data["url"]
+        token = url.split("/sub/")[-1] if "/sub/" in url else ""
+        username = message.from_user.username
+        profile_url = f"https://getvelora.xyz/profile/{token}"
+        if username:
+            profile_url += f"?u=@{username}"
         await message.answer(
             "✅ <b>Подключение</b>" + nl + nl
             + f"📱 Слот: <b>{label}</b> ({slot_n}/{limit})" + nl + nl
+            + f"🌐 <a href=\"{profile_url}\">Открыть профиль VELORA</a>" + nl + nl
             + "📥 Ссылка на конфиг:" + nl
             + f"<code>{url}</code>" + nl + nl
             + "Импорт в Hiddify / v2rayNG / Streisand." + nl
