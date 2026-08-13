@@ -402,7 +402,7 @@ async def guide_macos(message: Message):
 
 
 async def _issue_config_with_device(message: Message) -> None:
-    """Подключение: +1 слот устройства → выдача ссылки."""
+    """Подключение: выбор устройства или новое."""
     expire_outdated_subscriptions()
     profile = get_profile(message.from_user.id)
     has_active = is_user_subscription_active(message.from_user.id)
@@ -418,7 +418,8 @@ async def _issue_config_with_device(message: Message) -> None:
     plan = profile[3] or ""
     period = profile[4] or ""
     limit = get_device_limit(plan)
-    used = len(list_device_slots(message.from_user.id))
+    slots = list_device_slots(message.from_user.id)
+    used = len(slots)
 
     if used >= limit:
         await message.answer(
@@ -429,13 +430,47 @@ async def _issue_config_with_device(message: Message) -> None:
         )
         return
 
-    slot_n = used + 1
-    label = f"Устройство {slot_n}"
-    ok, err = add_device_slot(message.from_user.id, label, limit)
-    if not ok:
-        await message.answer(f"❌ {err}", reply_markup=get_config_keyboard())
-        return
+    if slots:
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        buttons = []
+        for sid, label, _ in slots:
+            buttons.append([InlineKeyboardButton(
+                text=f"📱 {label}",
+                callback_data=f"device_reuse:{sid}"
+            )])
+        buttons.append([InlineKeyboardButton(
+            text="➕ Новое устройство",
+            callback_data="device_new"
+        )])
+        kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+        slots_text = nl.join([f"{i+1}. {label}" for i, (_, label, _) in enumerate(slots)])
+        await message.answer(
+            f"📱 <b>Подключённые устройства ({used}/{limit}):</b>" + nl + nl
+            + slots_text + nl + nl
+            + "Выберите существующее устройство или добавьте новое:",
+            reply_markup=kb
+        )
+    else:
+        await state.set_state(DeviceState.waiting_label)
+        await message.answer(
+            "📱 Введите название устройства:" + nl + nl
+            + "<i>Например: iPhone 16 Pro, Samsung Galaxy S24, Windows PC</i>"
+        )
 
+
+@router.message(F.text == "📥 Получить конфигурацию")
+async def get_config(message: Message):
+    await _issue_config_with_device(message)
+
+
+async def _send_config(message, label: str, slot_n: int, limit: int, state=None):
+    """Выдаёт конфиг пользователю."""
+    if state:
+        await state.clear()
+    nl = chr(10)
+    profile = get_profile(message.from_user.id)
+    plan = profile[3] or ""
+    period = profile[4] or ""
     try:
         end_date = get_user_subscription_end_date(message.from_user.id)
         data = await create_vpn_subscription(
@@ -452,7 +487,7 @@ async def _issue_config_with_device(message: Message) -> None:
             profile_url += f"?u=@{username}"
         await message.answer(
             "✅ <b>Подключение</b>" + nl + nl
-            + f"📱 Слот: <b>{label}</b> ({slot_n}/{limit})" + nl + nl
+            + f"📱 <b>{label}</b> ({slot_n}/{limit})" + nl + nl
             + "🌐 Ваш профиль VELORA:" + nl
             + f"<code>{profile_url}</code>" + nl + nl
             + "Откройте ссылку и нажмите «Добавить подписку»." + nl
@@ -460,19 +495,12 @@ async def _issue_config_with_device(message: Message) -> None:
             reply_markup=get_config_keyboard(),
         )
     except VeloraAPIError as e:
-        slots = list_device_slots(message.from_user.id)
-        if slots:
-            remove_device_slot(slots[-1][0], message.from_user.id)
-        print(f"get_config API error: {e} {getattr(e, 'body', None)}")
+        print(f"get_config API error: {e}")
         await message.answer(
-            "⚠️ Не удалось получить конфиг. Слот не занят." + nl
-            + "Попробуйте ещё раз или напишите в поддержку.",
+            "⚠️ Не удалось получить конфиг. Попробуйте позже.",
             reply_markup=get_config_keyboard(),
         )
     except Exception as e:
-        slots = list_device_slots(message.from_user.id)
-        if slots:
-            remove_device_slot(slots[-1][0], message.from_user.id)
         print(f"get_config fail: {e}")
         await message.answer(
             "⚠️ Ошибка при выдаче конфигурации. Попробуйте позже.",
@@ -480,9 +508,30 @@ async def _issue_config_with_device(message: Message) -> None:
         )
 
 
-@router.message(F.text == "📥 Получить конфигурацию")
-async def get_config(message: Message):
-    await _issue_config_with_device(message)
+@router.callback_query(F.data == "device_new")
+async def cb_device_new(callback: CallbackQuery, state: FSMContext):
+    await callback.message.delete()
+    await state.set_state(DeviceState.waiting_label)
+    await callback.message.answer(
+        "📱 Введите название устройства:" + chr(10) + chr(10)
+        + "<i>Например: iPhone 16 Pro, Samsung Galaxy S24, Windows PC</i>"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("device_reuse:"))
+async def cb_device_reuse(callback: CallbackQuery):
+    nl = chr(10)
+    profile = get_profile(callback.from_user.id)
+    plan = profile[3] or ""
+    limit = get_device_limit(plan)
+    slots = list_device_slots(callback.from_user.id)
+    slot_id = int(callback.data.split(":")[1])
+    label = next((l for sid, l, _ in slots if sid == slot_id), "Устройство")
+    slot_n = next((i+1 for i, (sid, _, _) in enumerate(slots) if sid == slot_id), 1)
+    await callback.message.delete()
+    await _send_config(callback.message, label, slot_n, limit)
+    await callback.answer()
 
 
 @router.message(F.text == "🔌 Подключить устройство")
@@ -981,15 +1030,13 @@ async def device_label_save(message: Message, state: FSMContext):
         await message.answer("Название не может быть пустым.")
         return
     ok, err = add_device_slot(message.from_user.id, label, limit)
-    await state.clear()
     if not ok:
+        await state.clear()
         await message.answer(f"❌ {err}", reply_markup=devices_keyboard())
         return
-    text, _ = _devices_text(message.from_user.id)
-    await message.answer(
-        f"✅ Добавлено: <b>{label}</b>" + chr(10) + chr(10) + text,
-        reply_markup=devices_keyboard(),
-    )
+    slots = list_device_slots(message.from_user.id)
+    slot_n = len(slots)
+    await _send_config(message, label, slot_n, limit, state)
 
 
 @router.message(F.text == "🗑 Освободить слот")
