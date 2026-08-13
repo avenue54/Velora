@@ -259,11 +259,11 @@ async def check_subscription(callback: CallbackQuery):
 # ======================
 
 @router.message(F.text == "🚀 Подключиться")
-async def connect(message: Message):
+async def connect(message: Message, state: FSMContext):
     expire_outdated_subscriptions()
     has_active = is_user_subscription_active(message.from_user.id)
     if has_active:
-        await _issue_config_with_device(message)
+        await _issue_config_with_device(message, state)
         return
     await message.answer(
         CONNECT_TEXT,
@@ -401,7 +401,7 @@ async def guide_macos(message: Message):
     )
 
 
-async def _issue_config_with_device(message: Message) -> None:
+async def _issue_config_with_device(message: Message, state: FSMContext = None) -> None:
     """Подключение: выбор устройства или новое."""
     expire_outdated_subscriptions()
     profile = get_profile(message.from_user.id)
@@ -459,8 +459,8 @@ async def _issue_config_with_device(message: Message) -> None:
 
 
 @router.message(F.text == "📥 Получить конфигурацию")
-async def get_config(message: Message):
-    await _issue_config_with_device(message)
+async def get_config(message: Message, state: FSMContext):
+    await _issue_config_with_device(message, state)
 
 
 async def _send_config(message, label: str, slot_n: int, limit: int, state=None):
@@ -535,8 +535,8 @@ async def cb_device_reuse(callback: CallbackQuery):
 
 
 @router.message(F.text == "🔌 Подключить устройство")
-async def connect_device_btn(message: Message):
-    await _issue_config_with_device(message)
+async def connect_device_btn(message: Message, state: FSMContext):
+    await _issue_config_with_device(message, state)
 
 
 @router.message(F.text == "💬 Поддержка по настройке")
@@ -1006,7 +1006,7 @@ async def devices(message: Message):
 @router.message(F.text == "➕ Добавить устройство")
 async def device_add(message: Message, state: FSMContext):
     await state.clear()
-    await _issue_config_with_device(message)
+    await _issue_config_with_device(message, state)
 
 
 
